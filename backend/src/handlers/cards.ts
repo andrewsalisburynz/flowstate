@@ -68,6 +68,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         priority: request.priority,
         acceptanceCriteria: request.acceptanceCriteria,
         aiGenerated: false,
+        columnEnteredAt: new Date().toISOString(), // Set initial column entry time
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -91,6 +92,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'PUT' && path.startsWith('/cards/')) {
       const id = path.split('/')[2];
       const updates: UpdateCardRequest = JSON.parse(event.body || '{}');
+      
+      // Check if column is being changed to track duration
+      if (updates.column) {
+        const existingCard = await cardsService.get(id);
+        if (existingCard && existingCard.column !== updates.column) {
+          // Column changed, set columnEnteredAt to current timestamp
+          (updates as any).columnEnteredAt = new Date().toISOString();
+        }
+      }
       
       const card = await cardsService.update(id, updates);
       

@@ -13,6 +13,25 @@ interface Card {
   storyPoints?: number
   priority?: 'low' | 'medium' | 'high'
   aiGenerated?: boolean
+  acceptanceCriteria?: string[]
+}
+
+interface CardSplitSuggestion {
+  originalCard: {
+    title: string
+    description: string
+    storyPoints: number
+    priority: string
+    acceptanceCriteria: string[]
+  }
+  reason: string
+  splitCards: {
+    title: string
+    description: string
+    storyPoints: number
+    priority: string
+    acceptanceCriteria: string[]
+  }[]
 }
 
 const COLUMNS = ['To Do', 'In Progress', 'Done']
@@ -39,6 +58,14 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false)
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [alertsPanelOpen, setAlertsPanelOpen] = useState(true)
+  
+  // AI Request Status Management
+  const [aiRequestStatus, setAiRequestStatus] = useState<'ready' | 'processing' | 'retrying' | 'rate-limited'>('ready')
+  const [retryCountdown, setRetryCountdown] = useState(0)
+  
+  // Card Split Preview
+  const [showSplitPreview, setShowSplitPreview] = useState(false)
+  const [splitSuggestion, setSplitSuggestion] = useState<CardSplitSuggestion | null>(null)
 
   // Load alerts from localStorage on mount
   useEffect(() => {
@@ -66,6 +93,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem('flowstate-alerts-panel-open', String(alertsPanelOpen))
   }, [alertsPanelOpen])
+
+  // Countdown timer for rate limiting
+  useEffect(() => {
+    if (retryCountdown > 0) {
+      const timer = setTimeout(() => {
+        setRetryCountdown(retryCountdown - 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    } else if (retryCountdown === 0 && aiRequestStatus === 'rate-limited') {
+      setAiRequestStatus('ready')
+    }
+  }, [retryCountdown, aiRequestStatus])
 
 
   // Fetch cards
@@ -177,6 +216,7 @@ function App() {
 
   const createAICard = async () => {
     setAiLoading(true)
+    setAiRequestStatus('processing')
     try {
       const response = await fetch(`${API_URL}/ai-task`, {
         method: 'POST',
@@ -184,18 +224,125 @@ function App() {
         body: JSON.stringify({ description: aiDescription }),
       })
       
+      if (response.status === 429) {
+        // Rate limited
+        const error = await response.json()
+        const retryAfter = error.retryAfter || 30
+        setRetryCountdown(retryAfter)
+        setAiRequestStatus('rate-limited')
+        alert(`Rate limited. Please wait ${retryAfter} seconds before trying again.`)
+        return
+      }
+      
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.message || 'Failed to create AI card')
       }
       
-      const card = await response.json()
-      setCards(prev => [...prev, card])
-      setAiDescription('')
-      setShowAIModal(false)
+      const result = await response.json()
+      
+      console.log('AI Task Response:', result) // Debug log
+      
+      // Check if it's a split suggestion
+      if (result.type === 'split_suggestion') {
+        console.log('Split suggestion detected, showing modal') // Debug log
+        setSplitSuggestion(result)
+        setShowSplitPreview(true)
+        setShowAIModal(false)
+      } else {
+        // Regular card creation
+        console.log('Regular card creation') // Debug log
+        setCards(prev => [...prev, result])
+        setAiDescription('')
+        setShowAIModal(false)
+      }
+      
+      setAiRequestStatus('ready')
     } catch (error: any) {
       console.error('Error creating AI card:', error)
       alert(error.message || 'Failed to create AI card. Please ensure Bedrock is enabled in your AWS account.')
+      setAiRequestStatus('ready')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleApproveSplit = async () => {
+    if (!splitSuggestion) return
+    
+    setAiLoading(true)
+    try {
+      // Create each split card
+      for (const splitCard of splitSuggestion.splitCards) {
+        const response = await fetch(`${API_URL}/cards`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: splitCard.title,
+            description: splitCard.description,
+            column: 'To Do',
+            storyPoints: splitCard.storyPoints,
+            priority: splitCard.priority,
+            aiGenerated: true,
+            acceptanceCriteria: splitCard.acceptanceCriteria,
+          }),
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to create split card')
+        }
+        
+        const card = await response.json()
+        setCards(prev => [...prev, card])
+      }
+      
+      setShowSplitPreview(false)
+      setSplitSuggestion(null)
+      setAiDescription('')
+      alert(`Successfully created ${splitSuggestion.splitCards.length} cards!`)
+    } catch (error: any) {
+      console.error('Error creating split cards:', error)
+      alert(error.message || 'Failed to create split cards.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleRejectSplit = async () => {
+    if (!splitSuggestion) return
+    
+    setAiLoading(true)
+    try {
+      // Create the original card anyway
+      const original = splitSuggestion.originalCard
+      const response = await fetch(`${API_URL}/cards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: original.title,
+          description: original.description,
+          column: 'To Do',
+          storyPoints: original.storyPoints,
+          priority: original.priority,
+          aiGenerated: true,
+          acceptanceCriteria: original.acceptanceCriteria,
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to create card')
+      }
+      
+      const card = await response.json()
+      setCards(prev => [...prev, card])
+      
+      setShowSplitPreview(false)
+      setSplitSuggestion(null)
+      setAiDescription('')
+      alert('Card created successfully!')
+    } catch (error: any) {
+      console.error('Error creating card:', error)
+      alert(error.message || 'Failed to create card.')
     } finally {
       setAiLoading(false)
     }
@@ -243,11 +390,22 @@ function App() {
       <header className="header">
         <h1>🌊 FlowState</h1>
         <div className="header-actions">
+          {/* AI Status Indicator */}
+          <div className={`ai-status-indicator status-${aiRequestStatus}`}>
+            {aiRequestStatus === 'ready' && '✓ Ready'}
+            {aiRequestStatus === 'processing' && '⏳ Processing...'}
+            {aiRequestStatus === 'retrying' && '🔄 Retrying...'}
+            {aiRequestStatus === 'rate-limited' && `⏱️ Rate Limited - Wait ${retryCountdown}s`}
+          </div>
           <button onClick={() => setShowAddCard(true)} className="btn btn-primary">
             + Add Card
           </button>
-          <button onClick={() => setShowAIModal(true)} className="btn btn-ai">
-            ✨ Create with AI
+          <button 
+            onClick={() => setShowAIModal(true)} 
+            className="btn btn-ai"
+            disabled={aiRequestStatus === 'rate-limited'}
+          >
+            {aiLoading ? '⏳ Generating...' : '✨ Create with AI'}
           </button>
         </div>
       </header>
@@ -365,9 +523,89 @@ function App() {
               <button 
                 onClick={createAICard} 
                 className="btn btn-ai"
-                disabled={aiLoading || !aiDescription}
+                disabled={aiLoading || !aiDescription || aiRequestStatus === 'rate-limited'}
               >
                 {aiLoading ? 'Generating...' : 'Generate Card'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Split Preview Modal */}
+      {showSplitPreview && splitSuggestion && (
+        <div className="modal-overlay" onClick={() => setShowSplitPreview(false)}>
+          <div className="modal split-preview-modal" onClick={e => e.stopPropagation()}>
+            <h2>🔀 Card Split Suggestion</h2>
+            <p className="split-reason">{splitSuggestion.reason}</p>
+            
+            <div className="split-original-card">
+              <h3>Original Card (Too Large)</h3>
+              <div className="card-preview">
+                <h4>{splitSuggestion.originalCard.title}</h4>
+                <p>{splitSuggestion.originalCard.description}</p>
+                <div className="card-meta">
+                  <span className="story-points-badge large">
+                    📊 {splitSuggestion.originalCard.storyPoints} pts
+                  </span>
+                  <span className="priority-badge">
+                    {splitSuggestion.originalCard.priority}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="split-suggested-cards">
+              <h3>Suggested Split ({splitSuggestion.splitCards.length} cards)</h3>
+              <div className="split-cards-grid">
+                {splitSuggestion.splitCards.map((card, index) => (
+                  <div key={index} className="card-preview split-card">
+                    <h4>{card.title}</h4>
+                    <p>{card.description}</p>
+                    <div className="card-meta">
+                      <span className="story-points-badge">
+                        📊 {card.storyPoints} pts
+                      </span>
+                      <span className="priority-badge">
+                        {card.priority}
+                      </span>
+                    </div>
+                    {card.acceptanceCriteria && card.acceptanceCriteria.length > 0 && (
+                      <div className="acceptance-criteria">
+                        <strong>Acceptance Criteria:</strong>
+                        <ul>
+                          {card.acceptanceCriteria.map((criteria, i) => (
+                            <li key={i}>{criteria}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="split-comparison">
+              <p>
+                <strong>Total Story Points:</strong> Original: {splitSuggestion.originalCard.storyPoints} pts → 
+                Split: {splitSuggestion.splitCards.reduce((sum, card) => sum + card.storyPoints, 0)} pts
+              </p>
+            </div>
+
+            <div className="modal-actions">
+              <button 
+                onClick={handleRejectSplit} 
+                className="btn"
+                disabled={aiLoading}
+              >
+                Create Original Anyway
+              </button>
+              <button 
+                onClick={handleApproveSplit} 
+                className="btn btn-primary"
+                disabled={aiLoading}
+              >
+                {aiLoading ? 'Creating...' : `Create ${splitSuggestion.splitCards.length} Split Cards`}
               </button>
             </div>
           </div>

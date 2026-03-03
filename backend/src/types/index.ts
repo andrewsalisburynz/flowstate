@@ -8,6 +8,7 @@ export interface Card {
   priority?: 'low' | 'medium' | 'high';
   acceptanceCriteria?: string[];
   aiGenerated?: boolean;
+  columnEnteredAt?: string; // ISO timestamp when card entered current column
   createdAt: string;
   updatedAt: string;
 }
@@ -47,4 +48,10 @@ export interface BottleneckAlert {
   affectedCards?: string[];
   affectedColumn?: string;
   recommendations: string[];
+}
+
+export interface CardSplitSuggestion {
+  originalCard: AICardSuggestion;
+  reason: string;
+  splitCards: AICardSuggestion[];
 }

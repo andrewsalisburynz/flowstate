@@ -6,6 +6,9 @@ AI-powered Kanban board built on AWS serverless architecture for seamless task m
 
 - 📋 **Kanban Board** - Drag-and-drop cards between To Do, In Progress, and Done columns
 - ✨ **AI Task Creation** - Generate structured task cards from natural language using Claude
+- 🔄 **AI Rate Limiting** - Exponential backoff retry logic with visual status indicator (NEW in v2)
+- 🔀 **AI Card Splitting** - Automatic detection and suggestion for oversized cards (>8 story points) (NEW in v2)
+- ⏱️ **Duration Tracking** - Alerts for cards stuck in columns too long (>7 days medium, >14 days high) (NEW in v2)
 - 🤖 **AI Bottleneck Detection** - Automatic workflow analysis every 5 minutes
 - 🔄 **Real-time Sync** - WebSocket-powered live updates across all clients
 - ☁️ **Serverless AWS** - Fully managed infrastructure with auto-scaling
@@ -33,7 +36,7 @@ DynamoDB + Amazon Bedrock (Claude)
 - AWS Lambda (Node.js 20)
 - API Gateway (REST + WebSocket)
 - DynamoDB
-- Amazon Bedrock (Claude 3 Sonnet)
+- Amazon Bedrock (Claude 3.5 Haiku)
 - EventBridge (scheduled bottleneck detection)
 
 **Infrastructure:**
@@ -67,7 +70,7 @@ This deploys:
 
 1. Go to [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
 2. Navigate to Playgrounds → Chat
-3. Select "Claude 3 Sonnet"
+3. Select "Claude 3.5 Haiku"
 4. Submit use case details (first-time only)
 5. Wait for approval (usually instant)
 
@@ -94,7 +97,7 @@ The frontend is already configured with your API URLs in `.env.local`.
 - `GET /cards/{id}` - Get a card
 - `PUT /cards/{id}` - Update a card
 - `DELETE /cards/{id}` - Delete a card
-- `POST /ai-task` - AI-generated task creation
+- `POST /ai-task` - AI-generated task creation (with split detection and retry logic)
 
 **WebSocket:** `wss://a2ha2ia4wd.execute-api.ap-southeast-2.amazonaws.com/prod`
 
@@ -124,6 +127,28 @@ flowstate/
 │       └── app.ts       # CDK app entry
 └── aidlc-docs/         # AI-DLC planning artifacts
 ```
+
+## Iteration 2 Features (v2)
+
+### AI Rate Limiting with Exponential Backoff
+- **Backend**: Automatic retry logic with exponential backoff (1s, 2s, 4s, 8s delays)
+- **Frontend**: Visual status indicator showing Ready/Processing/Retrying/Rate Limited states
+- **User Experience**: Countdown timer shows seconds remaining when rate-limited
+- **Benefit**: Maximizes successful AI requests before blocking user
+
+### AI Card Splitting Detection
+- **Automatic Detection**: Cards with >8 story points trigger split suggestion
+- **AI-Powered**: Claude analyzes card and suggests 2-4 smaller, focused cards
+- **User Approval**: Preview modal shows original vs. split cards with story points comparison
+- **Flexible**: User can approve split or create original card anyway
+
+### Duration-Based Bottleneck Alerts
+- **Automatic Tracking**: Timestamps when cards enter each column
+- **Smart Alerts**: 
+  - Medium severity: Cards in column >7 days
+  - High severity: Cards in column >14 days
+- **Real-time**: Alerts appear in side panel via WebSocket
+- **Actionable**: Recommendations included with each alert
 
 ## Development
 

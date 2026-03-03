@@ -1,267 +1,397 @@
-# Requirements Analysis
+# Requirements Document - Iteration 3: Team Management & Assignment
 
-## Intent Analysis Summary
+## Executive Summary
 
-**User Request**: Build an AI-driven Kanban board SaaS product and deploy to AWS by end of tomorrow
-
-**Request Type**: New Project (Greenfield)
-
-**Scope Estimate**: System-wide - Full-stack serverless application with multiple AWS services
-
-**Complexity Estimate**: Complex - Multi-service architecture with AI integration, real-time features, and multi-tenancy
-
-**Timeline**: Aggressive - 1-2 days to deployment
-
----
-
-## Product Vision
-
-Transform the Kanban board from a **system of record** to a **system of action** - proactively surfacing insights and reducing cognitive overhead rather than just tracking manually entered data.
+**Iteration**: 3  
+**Focus**: Team member management, card assignment, and bottleneck detection integration  
+**Timeline**: 3-4 hours  
+**Priority**: Delivery velocity - keep it simple and functional
 
 ---
 
 ## Functional Requirements
 
-### FR1: Intelligent Task Management (AI-Powered)
-- **FR1.1**: Users describe work in natural language via text input
-- **FR1.2**: AI (Bedrock Claude) structures input into a card with:
-  - Title
-  - Description
-  - Acceptance criteria
-  - Story point estimate
-  - Suggested assignee
-  - Priority
-- **FR1.3**: AI-generated card suggestions returned to user for confirmation before persistence
-- **FR1.4**: Human oversight preserved at every step
+### FR-1: Team Member Management
 
-### FR2: Kanban Board Core Features
-- **FR2.1**: Visual board with columns (e.g., To Do, In Progress, Done)
-- **FR2.2**: Card creation, editing, and deletion
-- **FR2.3**: Drag-and-drop card movement between columns
-- **FR2.4**: Card assignment to team members
-- **FR2.5**: Multi-user real-time synchronization (other users' changes appear without refresh)
+**Description**: Add ability to create, view, edit, and delete team members.
 
-### FR3: Proactive Bottleneck Detection (AI-Powered)
-- **FR3.1**: Continuous AI analysis of board state
-- **FR3.2**: Surface risks before they become problems:
-  - Aging cards
-  - Workload imbalance
-  - Column bottlenecks
-  - Patterns the team hasn't noticed
-- **FR3.3**: Two analysis modes:
-  - **Scheduled full-board analysis**: Periodic, thorough, analyzes entire board against historical patterns (via EventBridge)
-  - **Event-driven scoped analysis**: Triggered by card moves, analyzes affected column and assignee only (via DynamoDB Streams)
-- **FR3.4**: AI returns empty result if nothing worth surfacing (avoid alert fatigue)
-- **FR3.5**: Alerts pushed to users via WebSocket
+**User Story**: As a team lead, I want to manage team members so I can assign work to them.
 
-### FR4: Multi-Tenancy
-- **FR4.1**: Support multiple tenant organizations
-- **FR4.2**: Complete data isolation between tenants
-- **FR4.3**: Every database record scoped to tenant identifier
-- **FR4.4**: WebSocket broadcasts scoped to tenant and board
-- **FR4.5**: Tenant context extracted from authentication token
+**Acceptance Criteria**:
+- User can add a new team member with a name
+- User can view a list of all team members
+- User can edit a team member's name
+- User can delete a team member (hard delete, unassigns from all cards)
+- Team member names must be unique (case-insensitive)
+- Team members are stored in a new DynamoDB table (TeamMembersTable)
 
-### FR5: User Authentication & Authorization
-- **FR5.1**: User authentication (mechanism TBD - Cognito likely)
-- **FR5.2**: Tenant-scoped user access
-- **FR5.3**: Team member management within tenant
+**Data Model**:
+```typescript
+interface TeamMember {
+  id: string              // UUID
+  name: string            // Unique, case-insensitive
+  createdAt: string       // ISO timestamp
+  updatedAt: string       // ISO timestamp
+}
+```
+
+**UI Location**: New "Team" page/tab in the app
+
+**Display**: Simple list with names
+
+---
+
+### FR-2: Card Assignment
+
+**Description**: Assign one or more team members to cards.
+
+**User Story**: As a team lead, I want to assign team members to cards so I can track who is working on what.
+
+**Acceptance Criteria**:
+- User can assign multiple team members to a card
+- Assignment happens via dropdown/select on the card itself (inline editing)
+- Unassigned cards are allowed (assignment is optional)
+- Assignments are displayed as team member names on the card
+- User can reassign cards freely at any time
+- Assignments are stored in the Card model in DynamoDB
+
+**Data Model Update**:
+```typescript
+interface Card {
+  // ... existing fields
+  assignees?: string[]    // Array of team member IDs
+}
+```
+
+**UI Location**: Dropdown/select on card (inline editing)
+
+**Display**: Team member names as text on card
+
+---
+
+### FR-3: Assignment Filtering
+
+**Description**: Filter cards by assignee in the board view.
+
+**User Story**: As a team member, I want to filter cards by assignee so I can see my assigned work.
+
+**Acceptance Criteria**:
+- Filter dropdown in board view shows all team members
+- Selecting a team member filters cards to show only those assigned to them
+- "All" option shows all cards (no filter)
+- Filter persists during session but resets on page reload
+
+---
+
+### FR-4: Workload-Based Bottleneck Detection
+
+**Description**: Detect when team members are overloaded based on story points in "In Progress".
+
+**User Story**: As a team lead, I want to be alerted when team members are overloaded so I can rebalance work.
+
+**Acceptance Criteria**:
+- Calculate workload as sum of story points for cards assigned to a team member in "In Progress" column
+- Alert when a team member has >8 story points in "In Progress" (high severity)
+- Alert includes team member name, current workload, and affected card IDs
+- Recommendations include: reassign cards, break down large cards, move cards back to "To Do"
+
+**Alert Structure**:
+```typescript
+{
+  severity: 'high',
+  category: 'team_member_overload',
+  message: 'Team member [Name] is overloaded with [X] story points in progress',
+  affectedTeamMember: 'team-member-id',
+  affectedCards: ['card-id-1', 'card-id-2'],
+  currentWorkload: 13,
+  threshold: 8,
+  recommendations: [
+    'Reassign cards to less busy team members',
+    'Break down large cards into smaller tasks',
+    'Move some cards back to To Do'
+  ]
+}
+```
+
+---
+
+### FR-5: Unassigned Card Alerts
+
+**Description**: Alert on unassigned cards in "In Progress" or "Done" columns.
+
+**User Story**: As a team lead, I want to be alerted about unassigned cards in active columns so I can ensure accountability.
+
+**Acceptance Criteria**:
+- Alert when a card in "In Progress" or "Done" has no assignees (low severity)
+- Alert includes card ID, title, and column
+- Recommendation: Assign the card to a team member
+
+**Alert Structure**:
+```typescript
+{
+  severity: 'low',
+  category: 'unassigned_card',
+  message: 'Card "[Title]" in [Column] is unassigned',
+  affectedCards: ['card-id'],
+  affectedColumn: 'In Progress',
+  recommendations: [
+    'Assign this card to a team member'
+  ]
+}
+```
+
+---
+
+### FR-6: Workload Distribution Analysis
+
+**Description**: Detect when workload is unbalanced across the team.
+
+**User Story**: As a team lead, I want to be alerted when work is unevenly distributed so I can rebalance.
+
+**Acceptance Criteria**:
+- Analyze workload distribution across all team members
+- Alert when some team members are overloaded (>8 points) while others are idle (0 points) (medium severity)
+- Alert includes list of overloaded and idle team members
+- Recommendation: Reassign work from overloaded to idle team members
+
+**Alert Structure**:
+```typescript
+{
+  severity: 'medium',
+  category: 'workload_imbalance',
+  message: 'Workload is unbalanced: [X] overloaded, [Y] idle',
+  overloadedMembers: [
+    { id: 'id', name: 'Name', workload: 13 }
+  ],
+  idleMembers: [
+    { id: 'id', name: 'Name', workload: 0 }
+  ],
+  recommendations: [
+    'Reassign work from overloaded to idle team members'
+  ]
+}
+```
+
+---
+
+### FR-7: Duration Tracking Per Assignee
+
+**Description**: Track how long cards have been assigned to each team member.
+
+**User Story**: As a team lead, I want to see how long cards have been with each assignee so I can identify blockers.
+
+**Acceptance Criteria**:
+- When a card is assigned or reassigned, record timestamp
+- Display duration on card (e.g., "Assigned to John for 3 days")
+- Include in bottleneck analysis (alert if assigned >7 days)
+
+**Data Model Update**:
+```typescript
+interface Card {
+  // ... existing fields
+  assignedAt?: string     // ISO timestamp when last assigned/reassigned
+}
+```
 
 ---
 
 ## Non-Functional Requirements
 
-### NFR1: Architecture - Fully Serverless AWS-Native
-- **NFR1.1**: No servers to manage
-- **NFR1.2**: All services AWS-native for operational coherence
-- **NFR1.3**: Data residency within AWS (Bedrock for AI processing)
-- **NFR1.4**: Infrastructure as Code via AWS CDK
+### NFR-1: Performance
+- Team member list should load in <500ms
+- Assignment operations should complete in <300ms
+- Bottleneck analysis should complete in <5 seconds
 
-### NFR2: Performance
-- **NFR2.1**: Real-time card updates (sub-second latency via WebSocket)
-- **NFR2.2**: AI task creation responses delivered asynchronously (no blocking)
-- **NFR2.3**: Event-driven bottleneck analysis near real-time (lightweight, fast)
-- **NFR2.4**: Scheduled bottleneck analysis can afford higher latency
+### NFR-2: Scalability
+- Support up to 50 team members
+- Support up to 1000 cards with assignments
+- Efficient queries for workload calculation
 
-### NFR3: Scalability
-- **NFR3.1**: Serverless scales to zero (cost-effective for unpredictable tenant volume)
-- **NFR3.2**: Scales automatically with demand
-- **NFR3.3**: Pool model for multi-tenancy (shared infrastructure)
-- **NFR3.4**: Preserve upgrade path to bridge model (dedicated resources for enterprise customers)
+### NFR-3: Usability
+- Simple, intuitive UI for team management
+- Inline assignment editing for quick updates
+- Clear visual indication of assignments on cards
 
-### NFR4: Security & Compliance
-- **NFR4.1**: Data privacy - AI processing stays within AWS
-- **NFR4.2**: Multi-tenant data isolation enforced at every operation
-- **NFR4.3**: Context assembly for AI prompts is a security boundary (prevent cross-tenant leaks)
-- **NFR4.4**: All data access scoped to requesting tenant
-
-### NFR5: Observability
-- **NFR5.1**: Structured logging with tenant context in every Lambda log entry
-- **NFR5.2**: Three visibility layers:
-  - **System health**: Lambda errors, API Gateway failures, database throttling
-  - **Usage patterns**: Cards created, AI suggestions accepted/rejected, alerts dismissed/acted on
-  - **Cost attribution**: Bedrock token consumption, Lambda invocations, database operations per tenant
-- **NFR5.3**: CloudWatch for logs, metrics, dashboards, alarms
-- **NFR5.4**: Kinesis for user behavior tracking and product analytics
-
-### NFR6: AI Quality & Iteration
-- **NFR6.1**: AI prompts versioned and stored in Parameter Store (not hardcoded)
-- **NFR6.2**: Prompt improvement without code deployment
-- **NFR6.3**: All prompts return structured JSON for reliable processing
-- **NFR6.4**: Low temperature for consistency over creativity
-- **NFR6.5**: Prompts include dynamic context (board state, team members, historical patterns)
-- **NFR6.6**: Usage data tracking for AI feature validation (acceptance rates)
-
-### NFR7: Operational Excellence
-- **NFR7.1**: Operational tooling provisioned by CDK alongside application
-- **NFR7.2**: Feature flags via AWS AppConfig for incomplete features
-- **NFR7.3**: Continuous delivery compatible (trunk-based development)
-- **NFR7.4**: Schema changes additive only (expand/contract pattern)
-
-### NFR8: Cost Model
-- **NFR8.1**: Serverless scales to zero for cost efficiency
-- **NFR8.2**: Per-tenant cost attribution for pricing model decisions
-- **NFR8.3**: Bedrock token consumption tracked per tenant
+### NFR-4: Data Integrity
+- Prevent duplicate team member names
+- Handle team member deletion gracefully (unassign from cards)
+- Maintain referential integrity between cards and team members
 
 ---
 
-## AWS Services Architecture
+## API Changes
 
-| Service | Role | Justification |
-|---------|------|---------------|
-| **React (S3 + CloudFront)** | Frontend SPA | Standard hosting with global edge delivery |
-| **API Gateway REST** | User-initiated operations | Synchronous request/response for deliberate user actions |
-| **API Gateway WebSocket** | Server-pushed events | Real-time multi-user sync and async AI result delivery |
-| **Lambda** | All compute | Serverless, auto-scaling, bounded-responsibility functions |
-| **DynamoDB** | Primary database | Serverless, scales with demand, native Streams support |
-| **DynamoDB Streams** | Event-driven triggers | Card changes trigger lightweight analysis without polling |
-| **Bedrock (Claude)** | AI layer | AWS-native, data stays in AWS, no third-party API keys |
-| **EventBridge** | Scheduled jobs | Triggers periodic full board analysis |
-| **CloudWatch** | Observability | Unified logs, metrics, dashboards, alarms |
-| **Kinesis** | User behavior tracking | Product analytics event streaming |
-| **AWS AppConfig** | Feature flags | Gate incomplete features during active development |
-| **AWS CDK** | Infrastructure as Code | All infrastructure provisioned as code |
-| **Parameter Store** | Prompt template storage | AI prompts versioned independently from code |
-| **Cognito (likely)** | Authentication | User authentication and authorization |
+### New Endpoints
 
----
+#### Team Members
+- `GET /team-members` - List all team members
+- `POST /team-members` - Create a team member
+- `GET /team-members/{id}` - Get a team member
+- `PUT /team-members/{id}` - Update a team member
+- `DELETE /team-members/{id}` - Delete a team member (unassigns from all cards)
 
-## Technical Decisions & Rationale
+#### Card Assignment (extend existing endpoints)
+- `PUT /cards/{id}` - Update card (now supports `assignees` field)
 
-### Why REST + WebSocket (Both Required)
-- **REST**: User-initiated operations (create, move, edit cards) - synchronous, response to requesting user only
-- **WebSocket**: Server-pushed events (AI results, bottleneck alerts, multi-user sync) - asynchronous, proactive push without polling
+### Request/Response Examples
 
-### Why Two AI Analysis Modes
-- **Scheduled**: Thorough, slow, periodic - full board analysis against historical patterns
-- **Event-driven**: Fast, lightweight, near-real-time - scoped to affected column/assignee only
-- Together: Depth + responsiveness without cost of full analysis on every card move
+**Create Team Member**:
+```json
+POST /team-members
+{
+  "name": "John Doe"
+}
 
-### AI Suggestions with Human Oversight
-- AI-generated cards require user confirmation before persistence
-- Preserves human oversight at every step
-- Allows prompt iteration without data consequences
+Response:
+{
+  "id": "uuid",
+  "name": "John Doe",
+  "createdAt": "2026-03-04T12:00:00Z",
+  "updatedAt": "2026-03-04T12:00:00Z"
+}
+```
 
-### Multi-Tenancy from Day One
-- Pool model (shared infrastructure, tenant-scoped records)
-- Preserve upgrade path to bridge model (dedicated resources for enterprise)
-- Retrofitting multi-tenancy is expensive - build foundations correctly now
+**Assign Team Members to Card**:
+```json
+PUT /cards/{id}
+{
+  "assignees": ["team-member-id-1", "team-member-id-2"]
+}
+```
 
 ---
 
-## Development Approach
+## Database Schema
 
-### AI-DLC Methodology
-- **Bolts**: Short, intense work cycles (hours/days) replacing traditional sprints
-- **Mob working**: Whole team working together in real-time with AI
-- **AI proposes, humans validate**: Critical decisions always made by humans
-- **Continuous delivery**: Code committed to trunk continuously throughout bolts
-- **Feature flags**: Incomplete features gated in production during development
+### New Table: TeamMembersTable
 
-### Five-Person Team Structure
-1. **Product Owner / Mob Facilitator**: Drives inception, owns bolt scope, validates AI proposals
-2. **Backend Construction Lead**: Leads Lambda and infrastructure generation
-3. **Frontend Construction Lead**: Leads React generation and component architecture
-4. **Infrastructure and Operations Lead**: Owns CDK stack, deployment pipeline, monitoring
-5. **Quality and Context Guardian**: Owns test strategy, validates AI-generated tests, maintains context
+**Partition Key**: `id` (String)
 
-### Repository Context as First-Class Artifact
-- Requirements, architecture decisions, prompt templates live in repository
-- Versioned and follow trunk-based flow like code
-- Fed into Kiro at start of every construction bolt
+**Attributes**:
+- `id`: String (UUID)
+- `name`: String (unique, case-insensitive)
+- `createdAt`: String (ISO timestamp)
+- `updatedAt`: String (ISO timestamp)
+
+**GSI**: `name-index` for uniqueness checks
+
+### Updated Table: CardsTable
+
+**New Attributes**:
+- `assignees`: List of Strings (team member IDs)
+- `assignedAt`: String (ISO timestamp, when last assigned/reassigned)
+
+---
+
+## UI Changes
+
+### New: Team Page
+- Navigation tab: "Team"
+- Simple list of team members
+- "Add Team Member" button
+- Edit/Delete actions per team member
+
+### Updated: Card Component
+- Add assignee dropdown/select (multi-select)
+- Display assigned team member names
+- Show assignment duration (e.g., "Assigned 3 days ago")
+
+### Updated: Board View
+- Add filter dropdown: "Filter by Assignee"
+- Options: "All", then list of team members
+
+### Updated: Bottleneck Alerts Panel
+- New alert types: team_member_overload, unassigned_card, workload_imbalance
+- Display team member names in alerts
+- Show workload metrics
+
+---
+
+## Implementation Priority
+
+### Must-Have (Iteration 3)
+1. ✅ Team member CRUD operations
+2. ✅ Card assignment (multiple assignees)
+3. ✅ Assignment display on cards
+4. ✅ Assignment filtering
+5. ✅ Workload-based bottleneck detection
+6. ✅ Unassigned card alerts
+7. ✅ Workload distribution analysis
+8. ✅ Duration tracking per assignee
+
+### Deferred (Future Iterations)
+- AI-suggested assignees based on workload
+- Split cards inheriting assignees
+- Authentication and permissions
+- Team roles and capacity planning
+- Advanced time tracking
 
 ---
 
 ## Success Criteria
 
-### Phase 1 MVP (Target: End of Tomorrow)
-- ✅ Intelligent task management working (AI card creation)
-- ✅ Basic Kanban board (create, move, edit cards)
-- ✅ Multi-user real-time sync
-- ✅ Proactive bottleneck detection (both modes)
-- ✅ Multi-tenancy foundations in place
-- ✅ Deployed to AWS and operational
-- ✅ Observability tooling in place
-- ✅ Infrastructure as Code (CDK)
-
-### Quality Indicators
-- AI suggestion acceptance rate tracked
-- Bottleneck alert action rate tracked
-- Per-tenant cost attribution working
-- Structured logging with tenant context
-- Feature flags operational
+Iteration 3 is successful when:
+- ✅ Team members can be added, edited, and deleted
+- ✅ Cards can be assigned to multiple team members
+- ✅ Assignments are displayed on cards
+- ✅ Cards can be filtered by assignee
+- ✅ Bottleneck detection alerts on overloaded team members (>8 points in progress)
+- ✅ Bottleneck detection alerts on unassigned cards in active columns
+- ✅ Bottleneck detection alerts on workload imbalance
+- ✅ Duration tracking shows how long cards have been assigned
+- ✅ All features work end-to-end in production
+- ✅ Timeline: 3-4 hours
 
 ---
 
-## Out of Scope (Phase 1)
-- Advanced user management features
-- Detailed reporting and analytics dashboards
-- Mobile applications
-- Third-party integrations
-- Advanced customization options
-- Billing and payment processing
-- Enterprise-specific features (SSO, audit logs, etc.)
+## Testing Strategy
 
----
+### Manual Testing
+1. Create team members
+2. Assign team members to cards
+3. Filter cards by assignee
+4. Verify bottleneck alerts for overloaded team members
+5. Verify alerts for unassigned cards
+6. Verify workload distribution alerts
+7. Test team member deletion (unassigns from cards)
+8. Test assignment duration tracking
 
-## Risks & Constraints
-
-### Timeline Risk
-- **Risk**: Aggressive 1-2 day timeline for complex system
-- **Mitigation**: Focus on MVP features only, leverage AI-DLC for rapid generation, use existing architectural decisions
-
-### AI Quality Risk
-- **Risk**: AI-generated cards or bottleneck alerts may not meet user expectations
-- **Mitigation**: Human confirmation required, prompts versioned in Parameter Store for rapid iteration, usage tracking for validation
-
-### Multi-Tenancy Complexity
-- **Risk**: Cross-tenant data leaks
-- **Mitigation**: Tenant scoping enforced at every operation, context assembly treated as security boundary, comprehensive testing
-
-### Cost Unpredictability
-- **Risk**: Bedrock token consumption could be high
-- **Mitigation**: Per-tenant cost tracking, low temperature for consistency, scoped event-driven analysis
+### Integration Testing
+1. Team member CRUD via API
+2. Card assignment via API
+3. Bottleneck analysis with team workload
+4. WebSocket updates for assignment changes
 
 ---
 
 ## Dependencies
 
-### External Dependencies
-- AWS account with appropriate permissions
-- Bedrock access (Claude model)
-- Domain name (optional for Phase 1)
-
-### Technical Dependencies
-- Node.js/npm for React frontend
-- AWS CDK for infrastructure
-- TypeScript for Lambda functions (assumed)
+- Existing: DynamoDB, Lambda, API Gateway, React, Bedrock
+- New: TeamMembersTable in DynamoDB
+- No new external dependencies
 
 ---
 
-## Assumptions
+## Risks and Mitigation
 
-1. Single board per tenant for Phase 1 (multi-board support deferred)
-2. Basic authentication sufficient for Phase 1 (Cognito)
-3. Team members manually added (no self-service signup in Phase 1)
-4. English language only for Phase 1
-5. Desktop web browser primary target (responsive design but not mobile-optimized)
-6. AWS region selection not critical for Phase 1 (single region deployment)
+**Risk**: Team member deletion could orphan cards  
+**Mitigation**: Hard delete unassigns from all cards automatically
+
+**Risk**: Workload calculation could be slow with many cards  
+**Mitigation**: Efficient DynamoDB queries, calculate only for "In Progress" cards
+
+**Risk**: Multiple assignees could complicate UI  
+**Mitigation**: Simple text display, comma-separated names
+
+**Risk**: Timeline is tight (3-4 hours)  
+**Mitigation**: Keep implementation simple, no fancy UI, focus on functionality
+
+---
+
+## Notes
+
+- **Delivery velocity is priority** - keep it simple and functional
+- No authentication/permissions in this iteration
+- No AI integration with assignments (deferred)
+- No advanced time tracking (just basic duration)
+- Focus on core functionality that works end-to-end

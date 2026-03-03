@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
-import { invokeClaudeForTask } from '../services/bedrock';
+import { invokeClaudeForTask, suggestCardSplit } from '../services/bedrock';
 import { cardsService } from '../services/dynamodb';
 import { broadcastToAll } from '../services/websocket';
 import { Card } from '../types';
@@ -39,7 +39,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Call Bedrock
     const suggestion = await invokeClaudeForTask(description, boardContext);
 
-    // Create card from AI suggestion
+    // Check if card is too large (>8 story points) and suggest split
+    if (suggestion.storyPoints && suggestion.storyPoints > 8) {
+      try {
+        const splitSuggestion = await suggestCardSplit(suggestion);
+        
+        // Return split suggestion to frontend for user approval
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            type: 'split_suggestion',
+            ...splitSuggestion
+          }),
+        };
+      } catch (splitError) {
+        // If split fails, fall through to create original card
+        console.error('Split suggestion failed:', splitError);
+      }
+    }
+
+    // Create card from AI suggestion (no split needed or split failed)
     const card: Card = {
       id: uuidv4(),
       title: suggestion.title,
@@ -70,6 +90,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   } catch (error: any) {
     console.error('AI Task Error:', error);
+    
+    // Handle throttling errors with retry-after information
+    if (error.isThrottling) {
+      return {
+        statusCode: 429,
+        headers,
+        body: JSON.stringify({
+          error: 'Rate limit exceeded',
+          retryAfter: error.retryAfter || 60,
+          message: error.message
+        }),
+      };
+    }
+    
+    // Handle other errors
     return {
       statusCode: 500,
       headers,

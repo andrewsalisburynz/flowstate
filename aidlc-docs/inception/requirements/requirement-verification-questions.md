@@ -1,265 +1,342 @@
-# Requirements Verification Questions
+# Requirement Verification Questions - Iteration 3
 
-Please answer the following questions to clarify and validate the requirements for the AI-driven Kanban board SaaS product.
+## Instructions
+Please answer all questions by filling in the [Answer]: tags. For multiple-choice questions, select the option letter (A, B, C, D, etc.).
 
 ---
 
-## Question 1
-What should be the default Kanban board column structure?
+## Team Member Management
 
-A) Simple 3-column (To Do, In Progress, Done)
-B) Standard 4-column (Backlog, To Do, In Progress, Done)
-C) Extended 5-column (Backlog, To Do, In Progress, Review, Done)
-D) Custom columns defined by tenant
-E) Other (please describe after [Answer]: tag below)
+### Q1: Team Member Data Model
+What information should we store for each team member?
+
+Options:
+A. Name only
+B. Name + Email
+C. Name + Email + Avatar/Photo
+D. Name + Email + Avatar + Role/Title
+E. Custom (please specify)
+
+[Answer]: A
+
+### Q2: Team Member Creation
+How should team members be added to the system?
+
+Options:
+A. Simple form with manual entry (no authentication)
+B. Invite via email with account creation
+C. Import from external system (e.g., LDAP, Active Directory)
+D. Self-registration with approval workflow
+E. Other (please specify)
+
+[Answer]: A
+
+### Q3: Team Member Uniqueness
+How should we ensure team members are unique?
+
+Options:
+A. By name (case-insensitive)
+B. By email address
+C. By unique ID/username
+D. No uniqueness constraint
+E. Other (please specify)
+
+[Answer]: A
+
+### Q4: Team Member Deletion
+What should happen when a team member is deleted?
+
+Options:
+A. Hard delete - remove completely, unassign from all cards
+B. Soft delete - mark as inactive, keep assignments
+C. Prevent deletion if assigned to any cards
+D. Transfer assignments to another team member first
+E. Other (please specify)
+
+[Answer]: A
+
+### Q5: Team Member Editing
+Should we be able to edit team member information after creation?
+
+Options:
+A. Yes, all fields editable
+B. Yes, but email/ID cannot be changed
+C. No, delete and recreate instead
+D. Other (please specify)
 
 [Answer]: A
 
 ---
 
-## Question 2
-For the authentication mechanism, which approach should we use?
+## Card Assignment
 
-A) AWS Cognito with email/password
-B) AWS Cognito with social login (Google, GitHub)
-C) AWS Cognito with both email/password and social login
-D) Custom authentication system
-E) Other (please describe after [Answer]: tag below)
+### Q6: Assignment Model
+How should team members be assigned to cards?
 
-[Answer]: A
-
----
-
-## Question 3
-How should team members be added to a tenant?
-
-A) Manual invitation by admin (email invite with signup link)
-B) Self-service signup with tenant code
-C) Admin creates accounts directly
-D) SSO integration (future-proofed)
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
----
-
-## Question 4
-For the AI task creation feature, where should users input their natural language description?
-
-A) Dedicated "Create with AI" button/modal
-B) Inline in the board (special input field)
-C) Both options available
-D) Chat-style interface
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
----
-
-## Question 5
-When AI generates a card suggestion, how should it be presented to the user for confirmation?
-
-A) Modal dialog with all fields editable before saving
-B) Preview card on board (ghost/draft state) with approve/reject buttons
-C) Side panel with detailed view and edit capability
-D) Simple notification with accept/reject
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
----
-
-## Question 6
-For bottleneck detection alerts, how should they be displayed to users?
-
-A) Toast notifications (dismissible)
-B) Dedicated alerts panel/sidebar
-C) Badge/indicator on affected cards or columns
-D) Email notifications
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: C
-
----
-
-## Question 7
-What data should be stored for each card in DynamoDB?
-
-A) Minimal (id, title, description, column, assignee, tenant)
-B) Standard (minimal + created date, updated date, story points, priority)
-C) Extended (standard + acceptance criteria, tags, comments, history)
-D) Comprehensive (extended + attachments, custom fields, relationships)
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: C
-
----
-
-## Question 8
-For the scheduled full-board bottleneck analysis, what frequency should EventBridge use?
-
-A) Every 5 minutes
-B) Every 15 minutes
-C) Every 30 minutes
-D) Every hour
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: C
-
----
-
-## Question 9
-Should the Phase 1 MVP support multiple boards per tenant?
-
-A) Yes, multiple boards per tenant
-B) No, single board per tenant (multi-board deferred to Phase 2)
-C) Single board but architecture ready for multi-board
-D) Other (please describe after [Answer]: tag below)
+Options:
+A. Single assignee per card
+B. Multiple assignees per card
+C. Single assignee + optional collaborators
+D. Assignment with role (owner, contributor, reviewer)
+E. Other (please specify)
 
 [Answer]: B
 
----
+### Q7: Assignment UI Location
+Where should assignment happen in the UI?
 
-## Question 10
-For the React frontend, what component library or design system should be used?
+Options:
+A. Dropdown/select in card creation modal
+B. Dropdown/select on card itself (inline editing)
+C. Dedicated assignment modal/dialog
+D. Drag-and-drop team members onto cards
+E. Multiple locations (please specify which)
 
-A) Material-UI (MUI)
-B) Ant Design
-C) Chakra UI
-D) Custom component library (built from scratch)
-E) Other (please describe after [Answer]: tag below)
+[Answer]: B
 
-[Answer]: C
+### Q8: Unassigned Cards
+How should unassigned cards be handled?
 
----
+Options:
+A. Allow unassigned cards (assignment is optional)
+B. Require assignment before card can be created
+C. Auto-assign to a default team member
+D. Show warning but allow unassigned
+E. Other (please specify)
 
-## Question 11
-What should be the DynamoDB table design approach for multi-tenancy?
+[Answer]: A
 
-A) Single table design with tenant as partition key
-B) Separate table per tenant
-C) Single table with composite keys (tenant + entity)
-D) Multiple tables with tenant scoping
-E) Other (please describe after [Answer]: tag below)
+### Q9: Assignment Display
+How should assignments be displayed on cards?
+
+Options:
+A. Team member name as text
+B. Avatar/initials badge
+C. Name + avatar
+D. Just a count (e.g., "2 assignees")
+E. Other (please specify)
+
+[Answer]: A
+
+### Q10: Reassignment
+Should we be able to reassign cards to different team members?
+
+Options:
+A. Yes, freely reassign at any time
+B. Yes, but only in certain columns (e.g., not in "Done")
+C. Yes, but require approval/confirmation
+D. No, assignment is permanent
+E. Other (please specify)
 
 [Answer]: A
 
 ---
 
-## Question 12
-For AI prompt templates in Parameter Store, what versioning strategy should be used?
+## Bottleneck Detection Integration
 
-A) Simple versioning (v1, v2, v3)
-B) Semantic versioning (1.0.0, 1.1.0, 2.0.0)
-C) Date-based versioning (2026-03-03)
-D) No versioning (single latest version)
-E) Other (please describe after [Answer]: tag below)
+### Q11: Workload Calculation
+How should we calculate a team member's workload?
+
+Options:
+A. Count of assigned cards (regardless of column)
+B. Count of assigned cards in "In Progress" only
+C. Sum of story points for assigned cards
+D. Sum of story points for assigned cards in "In Progress"
+E. Other (please specify)
+
+[Answer]: D
+
+### Q12: Overload Threshold
+What defines an "overloaded" team member?
+
+Options:
+A. More than X cards assigned (please specify X)
+B. More than Y story points assigned (please specify Y)
+C. More than Z cards in "In Progress" (please specify Z)
+D. More than W story points in "In Progress" (please specify W)
+E. Combination of above (please specify)
+
+[Answer]: D (8 points)
+
+### Q13: Overload Alert Severity
+What severity should overload alerts have?
+
+Options:
+A. Always high severity
+B. Medium if slightly over, high if significantly over
+C. Based on how much over threshold (e.g., 10% over = medium, 50% over = high)
+D. User-configurable
+E. Other (please specify)
+
+[Answer]: A
+
+### Q14: Unassigned Card Alerts
+Should we alert on unassigned cards?
+
+Options:
+A. Yes, always alert on unassigned cards
+B. Yes, but only for cards in "In Progress" or "Done"
+C. Yes, but only after X days unassigned (please specify X)
+D. No, unassigned cards are acceptable
+E. Other (please specify)
+
+[Answer]: B
+
+### Q15: Unassigned Alert Severity
+If we alert on unassigned cards, what severity?
+
+Options:
+A. Low severity
+B. Medium severity
+C. High severity
+D. Depends on column (e.g., high for "In Progress", low for "To Do")
+E. Other (please specify)
+
+[Answer]: A
+
+### Q16: Workload Distribution Analysis
+Should we analyze workload distribution across the team?
+
+Options:
+A. Yes, alert if workload is unbalanced (some overloaded, some idle)
+B. Yes, show distribution but don't alert
+C. No, only alert on individual overload
+D. Other (please specify)
+
+[Answer]: A
+
+### Q17: Alert Recommendations
+What recommendations should overload alerts include?
+
+Options:
+A. Suggest reassigning specific cards to less busy team members
+B. Suggest breaking down large cards
+C. Suggest moving cards back to "To Do"
+D. All of the above
+E. Other (please specify)
+
+[Answer]: D
+
+---
+
+## Data Storage
+
+### Q18: Team Member Storage
+Where should team member data be stored?
+
+Options:
+A. New DynamoDB table (TeamMembersTable)
+B. Add to existing CardsTable with different partition key
+C. Store in frontend only (localStorage)
+D. External service/API
+E. Other (please specify)
+
+[Answer]: A
+
+### Q19: Assignment Storage
+How should card-to-team-member assignments be stored?
+
+Options:
+A. Add assignee field(s) to Card model in DynamoDB
+B. Separate AssignmentsTable with card-member relationships
+C. Store in both Card model and separate table
+D. Other (please specify)
 
 [Answer]: A
 
 ---
 
-## Question 13
-What level of testing should be included in Phase 1 MVP?
+## UI/UX Considerations
 
-A) Unit tests only (Lambda functions)
-B) Unit + integration tests (API + Lambda + DynamoDB)
-C) Unit + integration + E2E tests (full user flows)
-D) Minimal testing (manual testing only for speed)
-E) Other (please describe after [Answer]: tag below)
+### Q20: Team Management UI
+Where should team member management happen?
 
-[Answer]: C
+Options:
+A. New "Team" page/tab in the app
+B. Settings/admin panel
+C. Modal/dialog accessible from header
+D. Sidebar panel
+E. Other (please specify)
 
----
+[Answer]: A
 
-## Question 14
-For the CDK infrastructure, should we use TypeScript or Python?
+### Q21: Team Member List Display
+How should the team member list be displayed?
 
-A) TypeScript (matches Lambda language)
-B) Python
-C) Other (please describe after [Answer]: tag below)
+Options:
+A. Simple list with names
+B. Card/tile layout with avatars
+C. Table with sortable columns
+D. Dropdown/select only (no dedicated list view)
+E. Other (please specify)
+
+[Answer]: A
+
+### Q22: Assignment Filtering
+Should we be able to filter cards by assignee?
+
+Options:
+A. Yes, filter dropdown in board view
+B. Yes, dedicated "My Cards" view per team member
+C. Yes, both filter and dedicated view
+D. No filtering needed
+E. Other (please specify)
 
 [Answer]: A
 
 ---
 
-## Question 15
-What should be the Lambda runtime for backend functions?
+## Scope and Priority
 
-A) Node.js 20.x (TypeScript)
-B) Node.js 18.x (TypeScript)
-C) Python 3.12
-D) Python 3.11
-E) Other (please describe after [Answer]: tag below)
+### Q23: Must-Have vs Nice-to-Have
+Which features are must-have for Iteration 3?
+
+Options:
+A. All features (team management + assignment + bottleneck integration)
+B. Team management + assignment only (defer bottleneck integration)
+C. Basic team management + assignment (defer advanced features)
+D. Let me specify (please list must-haves below)
+
+[Answer]: A
+
+If you selected D, please list must-have features:
+[Answer]: 
+
+### Q24: Timeline
+What's your target timeline for Iteration 3?
+
+Options:
+A. Same as Iteration 2 (3-4 hours)
+B. Longer (please specify)
+C. As fast as possible
+D. No specific timeline
 
 [Answer]: A
 
 ---
 
-## Question 16
-For WebSocket connections, how should connection state be managed?
+## Additional Context
 
-A) DynamoDB table storing connectionId + tenant + userId
-B) ElastiCache/Redis for connection state
-C) In-memory (Lambda only, no persistence)
-D) Other (please describe after [Answer]: tag below)
+### Q25: Integration with Existing Features
+Should team assignment integrate with existing features?
 
-[Answer]: A
+- AI card creation: Should AI suggest assignee based on workload?
+  [Answer]: No
 
----
+- Card splitting: Should split cards inherit assignee from original?
+  [Answer]: No
 
-## Question 17
-Should the frontend be a single-page application (SPA) or server-side rendered (SSR)?
+- Duration tracking: Should we track time per assignee?
+  [Answer]: Yes
 
-A) SPA (React with client-side routing)
-B) SSR (Next.js or similar)
-C) Static site generation (SSG)
-D) Other (please describe after [Answer]: tag below)
+### Q26: Future Considerations
+Are there any future features we should keep in mind while designing this?
 
-[Answer]: A
+Examples: Authentication, permissions, team roles, capacity planning, time tracking, etc.
 
----
-
-## Question 18
-For cost tracking per tenant, what granularity is needed?
-
-A) High granularity (track every Lambda invocation, Bedrock call, DynamoDB operation)
-B) Medium granularity (aggregate by service per tenant per day)
-C) Low granularity (monthly totals per tenant)
-D) No tracking in Phase 1 (defer to Phase 2)
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
+[Answer]: Nothing for now, delivery velocity is most important
 
 ---
 
-## Question 19
-What should be the Bedrock model configuration for AI features?
-
-A) Claude 3 Sonnet (balanced performance and cost)
-B) Claude 3 Haiku (fastest, lowest cost)
-C) Claude 3 Opus (highest quality, highest cost)
-D) Configurable per tenant (different tiers)
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
----
-
-## Question 20
-For the aggressive timeline (end of tomorrow), what is the acceptable trade-off?
-
-A) Full feature set with basic UI/UX
-B) Core features only with polished UI/UX
-C) Core features with basic UI/UX (speed prioritized)
-D) Prototype/demo quality (not production-ready)
-E) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
----
-
-**Instructions**: 
-1. Please answer each question by filling in the letter choice (A, B, C, D, or E) after the [Answer]: tag
-2. If you choose "Other" or want to provide additional context, add your description after the [Answer]: tag
-3. Let me know when you've completed all questions so I can proceed with the analysis
+## Summary
+Once you've answered all questions, please respond with: "I have answered all questions in the requirement-verification-questions.md file."
