@@ -1,216 +1,305 @@
-# Build Instructions - Iteration 2
+# Build Instructions - Iteration 3
 
 ## Prerequisites
 
-**Build Tools**:
-- Node.js 20+ (LTS)
-- npm 10+
-- AWS CDK CLI (for infrastructure)
+### Build Tools
+- **Node.js**: 20.x or higher
+- **npm**: 9.x or higher
+- **AWS CDK CLI**: 2.x (`npm install -g aws-cdk`)
+- **TypeScript**: 5.x (installed via npm)
 
-**Dependencies**:
-- TypeScript 5.x
+### Dependencies
+- AWS SDK v3 packages
 - React 18
-- AWS SDK v3
-- Vite 5.x
+- Vite 5
+- uuid library
 
-**Environment Variables**:
-- `VITE_API_URL` - REST API endpoint (frontend)
-- `VITE_WS_URL` - WebSocket API endpoint (frontend)
-- AWS credentials configured (for CDK deployment)
+### Environment Variables
+- **AWS_PROFILE**: AWS CLI profile with deployment permissions (optional)
+- **AWS_REGION**: Target AWS region (default: us-east-1)
+- **CDK_DEFAULT_ACCOUNT**: AWS account ID
+- **CDK_DEFAULT_REGION**: AWS region
 
-**System Requirements**:
-- OS: macOS, Linux, or Windows
-- Memory: 4GB+ RAM
-- Disk Space: 2GB+ free
+### System Requirements
+- **OS**: macOS, Linux, or Windows with WSL
+- **Memory**: 4GB RAM minimum
+- **Disk Space**: 2GB free space
+- **Network**: Internet connection for npm packages and AWS deployment
 
 ---
 
 ## Build Steps
 
-### 1. Install Dependencies
+### 1. Install Backend Dependencies
 
-#### Backend
 ```bash
 cd backend
 npm install
 ```
 
-#### Frontend
-```bash
-cd frontend
-npm install
+**Expected Output**:
+```
+added [X] packages in [Y]s
 ```
 
-#### Infrastructure
+**Verify**:
 ```bash
-cd infrastructure
-npm install
+ls node_modules/@aws-sdk
+# Should show: client-dynamodb, lib-dynamodb, client-bedrock-runtime, etc.
 ```
 
-### 2. Configure Environment
+---
 
-#### Frontend Environment
-The frontend already has `.env.local` configured with API endpoints:
-```bash
-cd frontend
-cat .env.local
-# Should show:
-# VITE_API_URL=https://xtv386hpgi.execute-api.ap-southeast-2.amazonaws.com/prod
-# VITE_WS_URL=wss://a2ha2ia4wd.execute-api.ap-southeast-2.amazonaws.com/prod
-```
+### 2. Build Backend
 
-#### AWS Credentials
-Ensure AWS credentials are configured:
-```bash
-aws configure list
-# Should show configured credentials
-```
-
-### 3. Build All Units
-
-#### Backend Build
 ```bash
 cd backend
 npm run build
 ```
 
 **Expected Output**:
-- TypeScript compilation successful
-- Compiled files in `backend/dist/`
-- No type errors
+```
+Successfully compiled TypeScript
+```
 
-#### Frontend Build
+**Build Artifacts**:
+- `backend/dist/` - Compiled JavaScript files
+- `backend/dist/handlers/` - Lambda handler functions
+- `backend/dist/services/` - Service layer modules
+- `backend/dist/types/` - Type definitions
+
+**Verify Build**:
 ```bash
-cd frontend
-npm run build
+ls backend/dist/handlers/
+# Should show: cards.js, team-members.js, ai-bottleneck.js, ai-task.js, websocket.js
+```
+
+---
+
+### 3. Install Infrastructure Dependencies
+
+```bash
+cd infrastructure
+npm install
 ```
 
 **Expected Output**:
-- Vite build successful
-- Optimized bundle in `frontend/dist/`
-- Asset files generated
+```
+added [X] packages in [Y]s
+```
 
-#### Infrastructure Build
+---
+
+### 4. Build Infrastructure
+
 ```bash
 cd infrastructure
 npm run build
 ```
 
 **Expected Output**:
-- TypeScript compilation successful
-- CDK synthesized CloudFormation templates
-- No CDK errors
-
-### 4. Verify Build Success
-
-#### Backend Verification
-```bash
-cd backend
-ls -la dist/
-# Should show compiled .js files matching src/ structure
+```
+Successfully compiled TypeScript
 ```
 
 **Build Artifacts**:
-- `dist/handlers/*.js` - Lambda handler functions
-- `dist/services/*.js` - Service layer
-- `dist/types/*.js` - Type definitions
+- `infrastructure/lib/*.js` - Compiled CDK stack files
+- `infrastructure/bin/*.js` - CDK app entry point
 
-#### Frontend Verification
-```bash
-cd frontend
-ls -la dist/
-# Should show index.html, assets/, and optimized bundles
-```
+---
 
-**Build Artifacts**:
-- `dist/index.html` - Entry HTML
-- `dist/assets/*.js` - JavaScript bundles
-- `dist/assets/*.css` - Stylesheets
-- `dist/favicon.svg` - Icon
+### 5. Synthesize CDK Stacks
 
-#### Infrastructure Verification
 ```bash
 cd infrastructure
-ls -la cdk.out/
-# Should show CloudFormation templates
+cdk synth
+```
+
+**Expected Output**:
+```
+Successfully synthesized to infrastructure/cdk.out
 ```
 
 **Build Artifacts**:
-- `cdk.out/*.template.json` - CloudFormation templates
-- `cdk.out/manifest.json` - CDK manifest
+- `infrastructure/cdk.out/KanbanStorageStack.template.json`
+- `infrastructure/cdk.out/KanbanApiStack.template.json`
+- `infrastructure/cdk.out/FlowStateFrontendStack.template.json`
 
-**Common Warnings** (Acceptable):
-- Vite: "Some chunks are larger than 500 KiB" - Expected for React bundles
-- TypeScript: Unused variable warnings in generated code
+**Verify**:
+```bash
+cat infrastructure/cdk.out/KanbanStorageStack.template.json | grep TeamMembersTable
+# Should show TeamMembersTable resource definition
+```
+
+---
+
+### 6. Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+**Expected Output**:
+```
+added [X] packages in [Y]s
+```
+
+---
+
+### 7. Build Frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+**Expected Output**:
+```
+vite v5.x.x building for production...
+✓ [X] modules transformed.
+dist/index.html                   [size]
+dist/assets/index-[hash].js       [size]
+dist/assets/index-[hash].css      [size]
+✓ built in [Y]s
+```
+
+**Build Artifacts**:
+- `frontend/dist/` - Production build
+- `frontend/dist/index.html` - Entry point
+- `frontend/dist/assets/` - Bundled JS and CSS
+
+**Verify Build**:
+```bash
+ls frontend/dist/
+# Should show: index.html, assets/
+```
+
+---
+
+## Verify Build Success
+
+### Backend Verification
+
+1. **Check compiled files exist**:
+   ```bash
+   test -f backend/dist/handlers/team-members.js && echo "✓ Team members handler built"
+   test -f backend/dist/services/bottleneck-analysis.js && echo "✓ Bottleneck analysis service built"
+   ```
+
+2. **Check for compilation errors**:
+   ```bash
+   cd backend
+   npm run build 2>&1 | grep -i error
+   # Should return nothing (no errors)
+   ```
+
+### Infrastructure Verification
+
+1. **Check CDK synthesis**:
+   ```bash
+   cd infrastructure
+   cdk synth --quiet > /dev/null && echo "✓ CDK synthesis successful"
+   ```
+
+2. **Validate stack templates**:
+   ```bash
+   test -f infrastructure/cdk.out/KanbanStorageStack.template.json && echo "✓ Storage stack template exists"
+   test -f infrastructure/cdk.out/KanbanApiStack.template.json && echo "✓ API stack template exists"
+   ```
+
+### Frontend Verification
+
+1. **Check build output**:
+   ```bash
+   test -f frontend/dist/index.html && echo "✓ Frontend built successfully"
+   test -d frontend/dist/assets && echo "✓ Assets bundled"
+   ```
+
+2. **Check for build errors**:
+   ```bash
+   cd frontend
+   npm run build 2>&1 | grep -i error
+   # Should return nothing (no errors)
+   ```
+
+---
+
+## Common Warnings (Acceptable)
+
+### Backend
+- `ExperimentalWarning: stream/web is an experimental feature` - Safe to ignore
+- Deprecation warnings from AWS SDK - Safe to ignore if using latest versions
+
+### Infrastructure
+- `[Warning] CDK version mismatch` - Ensure CDK CLI matches package version
+- `[Warning] Bootstrap stack version` - Run `cdk bootstrap` if needed
+
+### Frontend
+- `(!) Some chunks are larger than 500 KiB` - Expected for React apps
+- Source map warnings - Safe to ignore in production builds
 
 ---
 
 ## Troubleshooting
 
-### Build Fails with Dependency Errors
+### Build Fails with "Cannot find module"
 
-**Cause**: Missing or outdated dependencies
+**Cause**: Missing dependencies or incorrect node_modules
 
 **Solution**:
 ```bash
-# Clear node_modules and reinstall
+# Delete node_modules and reinstall
 rm -rf node_modules package-lock.json
 npm install
-
-# Or use npm ci for clean install
-npm ci
+npm run build
 ```
 
-### Build Fails with TypeScript Compilation Errors
+### Build Fails with TypeScript Errors
 
-**Cause**: Type errors in code
-
-**Solution**:
-1. Check error output for specific file and line
-2. Run type checking:
-   ```bash
-   npm run build
-   # Review errors
-   ```
-3. Fix type errors in source files
-4. Rebuild
-
-### Build Fails with "Cannot find module" Errors
-
-**Cause**: Missing imports or incorrect paths
+**Cause**: Type mismatches or missing type definitions
 
 **Solution**:
-1. Verify import paths are correct
-2. Check that imported files exist
-3. Ensure TypeScript paths are configured in `tsconfig.json`
+1. Check error message for specific file and line
+2. Verify type definitions match between files
+3. Ensure all imports are correct
+4. Run `npm run build` again
 
-### Frontend Build Fails with Environment Variable Errors
+### CDK Synth Fails with "Stack not found"
 
-**Cause**: Missing `.env.local` file
+**Cause**: CDK app not properly configured
 
 **Solution**:
 ```bash
-cd frontend
-cp .env.example .env.local
-# Edit .env.local with correct API URLs
+cd infrastructure
+npm run build
+cdk synth --all
+```
+
+### Frontend Build Fails with "Out of memory"
+
+**Cause**: Insufficient memory for Vite build
+
+**Solution**:
+```bash
+export NODE_OPTIONS="--max-old-space-size=4096"
+npm run build
 ```
 
 ---
 
-## Build Validation Checklist
+## Build Time Estimates
 
-- [ ] Backend compiles without errors
-- [ ] Frontend builds successfully
-- [ ] Infrastructure synthesizes CloudFormation templates
-- [ ] All TypeScript type checks pass
-- [ ] No critical warnings in build output
-- [ ] Build artifacts generated in expected locations
+- **Backend**: ~30 seconds
+- **Infrastructure**: ~20 seconds
+- **Frontend**: ~45 seconds
+- **Total**: ~2 minutes
 
 ---
 
 ## Next Steps
 
 After successful build:
-1. Proceed to Unit Test Execution
-2. Run Integration Tests
-3. Deploy to AWS (if needed)
+1. Proceed to deployment (infrastructure first, then frontend)
+2. Run integration tests
+3. Verify all features work end-to-end

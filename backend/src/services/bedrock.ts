@@ -37,7 +37,6 @@ async function invokeBedrockWithRetry(
       const isThrottled = isThrottlingError(error);
       
       if (isThrottled && attempt < maxRetries) {
-        console.log(`Throttled, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
         await sleep(delay);
         delay *= 2; // Exponential backoff: 1s, 2s, 4s, 8s
         attempt++;

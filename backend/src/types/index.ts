@@ -9,6 +9,8 @@ export interface Card {
   acceptanceCriteria?: string[];
   aiGenerated?: boolean;
   columnEnteredAt?: string; // ISO timestamp when card entered current column
+  assignees?: string[]; // Array of team member IDs
+  assignedAt?: string; // ISO timestamp when last assigned/reassigned
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +33,7 @@ export interface UpdateCardRequest {
   storyPoints?: number;
   priority?: 'low' | 'medium' | 'high';
   acceptanceCriteria?: string[];
+  assignees?: string[];
 }
 
 export interface AICardSuggestion {
@@ -43,10 +46,15 @@ export interface AICardSuggestion {
 
 export interface BottleneckAlert {
   severity: 'low' | 'medium' | 'high';
-  category: 'aging_cards' | 'workload_imbalance' | 'column_bottleneck';
+  category: 'aging_cards' | 'workload_imbalance' | 'column_bottleneck' | 'team_member_overload' | 'unassigned_card' | 'workload_imbalance_team';
   message: string;
   affectedCards?: string[];
   affectedColumn?: string;
+  affectedTeamMember?: string;
+  currentWorkload?: number;
+  threshold?: number;
+  overloadedMembers?: Array<{ id: string; name: string; workload: number }>;
+  idleMembers?: Array<{ id: string; name: string; workload: number }>;
   recommendations: string[];
 }
 
@@ -54,4 +62,20 @@ export interface CardSplitSuggestion {
   originalCard: AICardSuggestion;
   reason: string;
   splitCards: AICardSuggestion[];
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  nameLowercase: string; // For uniqueness checks
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTeamMemberRequest {
+  name: string;
+}
+
+export interface UpdateTeamMemberRequest {
+  name: string;
 }

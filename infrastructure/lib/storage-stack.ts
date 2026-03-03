@@ -5,6 +5,7 @@ import { Construct } from 'constructs';
 export class StorageStack extends cdk.Stack {
   public readonly cardsTable: dynamodb.Table;
   public readonly connectionsTable: dynamodb.Table;
+  public readonly teamMembersTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -32,6 +33,21 @@ export class StorageStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Team Members table
+    this.teamMembersTable = new dynamodb.Table(this, 'TeamMembersTable', {
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      pointInTimeRecovery: true,
+    });
+
+    // GSI for name uniqueness checks
+    this.teamMembersTable.addGlobalSecondaryIndex({
+      indexName: 'name-index',
+      partitionKey: { name: 'nameLowercase', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     new cdk.CfnOutput(this, 'CardsTableName', {
       value: this.cardsTable.tableName,
       exportName: 'CardsTableName',
@@ -40,6 +56,11 @@ export class StorageStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ConnectionsTableName', {
       value: this.connectionsTable.tableName,
       exportName: 'ConnectionsTableName',
+    });
+
+    new cdk.CfnOutput(this, 'TeamMembersTableName', {
+      value: this.teamMembersTable.tableName,
+      exportName: 'TeamMembersTableName',
     });
   }
 }

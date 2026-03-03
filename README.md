@@ -1,5 +1,7 @@
 # 🌊 FlowState
 
+[![CI](https://github.com/yourusername/flowstate/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/flowstate/actions/workflows/ci.yml)
+
 AI-powered Kanban board built on AWS serverless architecture for seamless task management and workflow optimization.
 
 ## Features
@@ -151,6 +153,19 @@ flowstate/
 - **Actionable**: Recommendations included with each alert
 
 ## Development
+
+### Continuous Integration
+
+Every push and pull request runs automated checks:
+
+✅ **TypeScript Compilation** - Backend, frontend, and infrastructure  
+✅ **CDK Synth Validation** - Infrastructure as Code validation  
+✅ **Security Audits** - npm audit for known vulnerabilities  
+✅ **Code Quality** - No console.log statements in production code  
+
+See [.github/workflows/ci.yml](.github/workflows/ci.yml) for the full pipeline.
+
+### Local Development
 
 **Backend:**
 ```bash

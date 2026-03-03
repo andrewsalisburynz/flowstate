@@ -1,7 +1,8 @@
 import { EventBridgeEvent } from 'aws-lambda';
 import { analyzeBottlenecks } from '../services/bedrock';
-import { cardsService } from '../services/dynamodb';
+import { cardsService, teamMembersService } from '../services/dynamodb';
 import { broadcastToAll } from '../services/websocket';
+import { bottleneckAnalysisService } from '../services/bottleneck-analysis';
 
 export const handler = async (event: EventBridgeEvent<string, any>): Promise<void> => {
   try {
@@ -13,6 +14,12 @@ export const handler = async (event: EventBridgeEvent<string, any>): Promise<voi
 
     // Get AI-based bottleneck alerts
     const aiAlerts = await analyzeBottlenecks(cards);
+
+    // Get team members for workload analysis
+    const teamMembers = await teamMembersService.list();
+
+    // Analyze team workload
+    const teamWorkloadAlerts = await bottleneckAnalysisService.analyzeTeamWorkload(cards, teamMembers);
 
     // Add duration-based alerts for aging cards
     const durationAlerts: any[] = [];
@@ -56,8 +63,8 @@ export const handler = async (event: EventBridgeEvent<string, any>): Promise<voi
       }
     }
 
-    // Combine AI alerts and duration alerts
-    const allAlerts = [...aiAlerts, ...durationAlerts];
+    // Combine all alerts: AI + team workload + duration
+    const allAlerts = [...aiAlerts, ...teamWorkloadAlerts, ...durationAlerts];
 
     if (allAlerts.length > 0) {
       // Broadcast alerts to all clients

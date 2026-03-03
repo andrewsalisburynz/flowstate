@@ -12,6 +12,7 @@ import { Construct } from 'constructs';
 interface ApiStackProps extends cdk.StackProps {
   cardsTable: dynamodb.ITable;
   connectionsTable: dynamodb.ITable;
+  teamMembersTable: dynamodb.ITable;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -21,7 +22,7 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { cardsTable, connectionsTable } = props;
+    const { cardsTable, connectionsTable, teamMembersTable } = props;
 
     // Lambda Layer for shared dependencies
     const lambdaLayer = new lambda.LayerVersion(this, 'DependenciesLayer', {
@@ -34,6 +35,7 @@ export class ApiStack extends cdk.Stack {
     const commonEnv = {
       CARDS_TABLE: cardsTable.tableName,
       CONNECTIONS_TABLE: connectionsTable.tableName,
+      TEAM_MEMBERS_TABLE: teamMembersTable.tableName,
     };
 
     // Cards CRUD Lambda
@@ -48,6 +50,7 @@ export class ApiStack extends cdk.Stack {
 
     cardsTable.grantReadWriteData(cardsHandler);
     connectionsTable.grantReadData(cardsHandler);
+    teamMembersTable.grantReadData(cardsHandler);
 
     // WebSocket Connect Handler
     const wsConnectHandler = new lambda.Function(this, 'WsConnectHandler', {
@@ -127,6 +130,7 @@ export class ApiStack extends cdk.Stack {
 
     cardsTable.grantReadData(aiBottleneckHandler);
     connectionsTable.grantReadData(aiBottleneckHandler);
+    teamMembersTable.grantReadData(aiBottleneckHandler);
     
     // Grant Bedrock and AWS Marketplace access
     aiBottleneckHandler.addToRolePolicy(new iam.PolicyStatement({
@@ -170,6 +174,30 @@ export class ApiStack extends cdk.Stack {
     const aiTask = this.restApi.root.addResource('ai-task');
     aiTask.addMethod('POST', new apigateway.LambdaIntegration(aiTaskHandler));
 
+    // Team Members Lambda
+    const teamMembersHandler = new lambda.Function(this, 'TeamMembersHandler', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'handlers/team-members.handler',
+      code: lambda.Code.fromAsset('../backend/dist'),
+      layers: [lambdaLayer],
+      environment: commonEnv,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    teamMembersTable.grantReadWriteData(teamMembersHandler);
+    cardsTable.grantReadWriteData(teamMembersHandler);
+    connectionsTable.grantReadData(teamMembersHandler);
+
+    // Team Members endpoints
+    const teamMembers = this.restApi.root.addResource('team-members');
+    teamMembers.addMethod('GET', new apigateway.LambdaIntegration(teamMembersHandler));
+    teamMembers.addMethod('POST', new apigateway.LambdaIntegration(teamMembersHandler));
+
+    const teamMember = teamMembers.addResource('{id}');
+    teamMember.addMethod('GET', new apigateway.LambdaIntegration(teamMembersHandler));
+    teamMember.addMethod('PUT', new apigateway.LambdaIntegration(teamMembersHandler));
+    teamMember.addMethod('DELETE', new apigateway.LambdaIntegration(teamMembersHandler));
+
     // WebSocket API
     this.webSocketApi = new apigatewayv2.WebSocketApi(this, 'KanbanWebSocketApi', {
       connectRouteOptions: {
@@ -200,12 +228,14 @@ export class ApiStack extends cdk.Stack {
     cardsHandler.addToRolePolicy(wsManagementPolicy);
     aiTaskHandler.addToRolePolicy(wsManagementPolicy);
     aiBottleneckHandler.addToRolePolicy(wsManagementPolicy);
+    teamMembersHandler.addToRolePolicy(wsManagementPolicy);
 
     // Update Lambda environment with WebSocket endpoint
     const wsEndpoint = `https://${this.webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${wsStage.stageName}`;
     cardsHandler.addEnvironment('WEBSOCKET_ENDPOINT', wsEndpoint);
     aiTaskHandler.addEnvironment('WEBSOCKET_ENDPOINT', wsEndpoint);
     aiBottleneckHandler.addEnvironment('WEBSOCKET_ENDPOINT', wsEndpoint);
+    teamMembersHandler.addEnvironment('WEBSOCKET_ENDPOINT', wsEndpoint);
 
     // EventBridge rule for bottleneck detection (runs every 5 minutes)
     const bottleneckRule = new events.Rule(this, 'BottleneckDetectionRule', {

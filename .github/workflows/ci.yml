@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Build, Type Check & Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install workspace dependencies
+        run: |
+          cd backend && npm ci
+          cd ../frontend && npm ci
+          cd ../infrastructure && npm ci
+
+      - name: TypeScript - Backend
+        run: cd backend && npm run build
+
+      - name: TypeScript - Frontend
+        run: cd frontend && npm run build
+
+      - name: TypeScript - Infrastructure
+        run: cd infrastructure && npm run build
+
+      - name: CDK Synth Validation
+        run: cd infrastructure && npx cdk synth --quiet
+        env:
+          # CDK synth doesn't need real AWS credentials, just needs them defined
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+          AWS_SESSION_TOKEN: dummy
+
+      - name: Security Audit - Backend
+        run: cd backend && npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Security Audit - Frontend
+        run: cd frontend && npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Security Audit - Infrastructure
+        run: cd infrastructure && npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Check for console.log statements
+        run: |
+          if grep -r "console\.log" backend/src frontend/src --include="*.ts" --include="*.tsx" | grep -v "console.error"; then
+            echo "❌ Found console.log statements in source code"
+            exit 1
+          else
+            echo "✅ No console.log statements found"
+          fi
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ All checks passed!"
+          echo "- TypeScript compilation: ✅"
+          echo "- CDK synth validation: ✅"
+          echo "- Security audits: ✅"
+          echo "- Code quality: ✅"

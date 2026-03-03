@@ -35,3 +35,9 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# presentation and planning docs
+/docs/
+
+# MCP tools
+/.playwright-mcp/

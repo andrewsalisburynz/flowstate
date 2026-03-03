@@ -20,6 +20,7 @@ new ApiStack(app, 'KanbanApiStack', {
   env,
   cardsTable: storageStack.cardsTable,
   connectionsTable: storageStack.connectionsTable,
+  teamMembersTable: storageStack.teamMembersTable,
 });
 
 // Frontend stack (S3 + CloudFront)

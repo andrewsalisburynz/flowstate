@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import './App.css'
+import { TeamPage } from './components/TeamPage'
 
 const API_URL = import.meta.env.VITE_API_URL || 'YOUR_API_URL_HERE'
 const WS_URL = import.meta.env.VITE_WS_URL || 'YOUR_WS_URL_HERE'
@@ -14,6 +15,15 @@ interface Card {
   priority?: 'low' | 'medium' | 'high'
   aiGenerated?: boolean
   acceptanceCriteria?: string[]
+  assignees?: string[]
+  assignedAt?: string
+}
+
+interface TeamMember {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
 }
 
 interface CardSplitSuggestion {
@@ -43,13 +53,33 @@ interface Alert {
   message: string
   affectedCards?: string[]
   affectedColumn?: string
+  affectedTeamMember?: string
+  currentWorkload?: number
+  threshold?: number
+  overloadedMembers?: Array<{ id: string; name: string; workload: number }>
+  idleMembers?: Array<{ id: string; name: string; workload: number }>
   recommendations: string[]
   timestamp: string
   acknowledged: boolean
 }
 
+interface Toast {
+  id: string
+  message: string
+  type: 'success' | 'error' | 'info' | 'warning'
+}
+
+interface ConfirmDialog {
+  message: string
+  onConfirm: () => void
+  onCancel: () => void
+}
+
 function App() {
   const [cards, setCards] = useState<Card[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [currentView, setCurrentView] = useState<'board' | 'team'>('board')
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddCard, setShowAddCard] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
@@ -66,6 +96,12 @@ function App() {
   // Card Split Preview
   const [showSplitPreview, setShowSplitPreview] = useState(false)
   const [splitSuggestion, setSplitSuggestion] = useState<CardSplitSuggestion | null>(null)
+
+  // Toast notifications
+  const [toasts, setToasts] = useState<Toast[]>([])
+  
+  // Confirm dialog
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null)
 
   // Load alerts from localStorage on mount
   useEffect(() => {
@@ -106,10 +142,37 @@ function App() {
     }
   }, [retryCountdown, aiRequestStatus])
 
+  // Toast notification helper
+  const showToast = (message: string, type: Toast['type'] = 'info') => {
+    const id = `${Date.now()}-${Math.random()}`
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4000)
+  }
+
+  // Confirm dialog helper
+  const showConfirm = (message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        message,
+        onConfirm: () => {
+          setConfirmDialog(null)
+          resolve(true)
+        },
+        onCancel: () => {
+          setConfirmDialog(null)
+          resolve(false)
+        }
+      })
+    })
+  }
+
 
   // Fetch cards
   useEffect(() => {
     fetchCards()
+    fetchTeamMembers()
   }, [])
 
   // WebSocket connection
@@ -129,6 +192,12 @@ function App() {
         fetchCards() // Refresh cards
       } else if (message.type === 'card_deleted') {
         setCards(prev => prev.filter(c => c.id !== message.data.id))
+      } else if (message.type === 'team_member_created' || message.type === 'team_member_updated') {
+        fetchTeamMembers() // Refresh team members
+      } else if (message.type === 'team_member_deleted') {
+        setTeamMembers(prev => prev.filter(m => m.id !== message.data.id))
+        // Also refresh cards to update assignments
+        fetchCards()
       } else if (message.type === 'bottleneck_alerts') {
         const newAlerts = message.data.map((alert: any) => ({
           ...alert,
@@ -192,6 +261,63 @@ function App() {
     }
   }
 
+  const fetchTeamMembers = async () => {
+    try {
+      const response = await fetch(`${API_URL}/team-members`)
+      const data = await response.json()
+      setTeamMembers(data)
+    } catch (error) {
+      console.error('Error fetching team members:', error)
+    }
+  }
+
+  const updateCardAssignees = async (cardId: string, assigneeIds: string[]) => {
+    try {
+      const response = await fetch(`${API_URL}/cards/${cardId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignees: assigneeIds }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to update card assignees')
+      }
+      
+      const updatedCard = await response.json()
+      setCards(prev => prev.map(c => c.id === cardId ? updatedCard : c))
+    } catch (error) {
+      console.error('Error updating card assignees:', error)
+      showToast('Failed to update card assignees. Please try again.', 'error')
+    }
+  }
+
+  const getAssignmentDuration = (assignedAt?: string): string => {
+    if (!assignedAt) return ''
+    
+    const now = Date.now()
+    const assigned = new Date(assignedAt).getTime()
+    const durationMs = now - assigned
+    const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24))
+    const durationHours = Math.floor(durationMs / (1000 * 60 * 60))
+    
+    if (durationDays > 0) {
+      return `${durationDays} day${durationDays > 1 ? 's' : ''} ago`
+    } else if (durationHours > 0) {
+      return `${durationHours} hour${durationHours > 1 ? 's' : ''} ago`
+    } else {
+      return 'Just now'
+    }
+  }
+
+  const getTeamMemberName = (id: string): string => {
+    const member = teamMembers.find(m => m.id === id)
+    return member ? member.name : 'Unknown'
+  }
+
+  const filteredCards = selectedAssignee
+    ? cards.filter(card => card.assignees?.includes(selectedAssignee))
+    : cards
+
   const createCard = async () => {
     try {
       const response = await fetch(`${API_URL}/cards`, {
@@ -210,7 +336,7 @@ function App() {
       setShowAddCard(false)
     } catch (error) {
       console.error('Error creating card:', error)
-      alert('Failed to create card. Please try again.')
+      showToast('Failed to create card. Please try again.', 'error')
     }
   }
 
@@ -230,7 +356,7 @@ function App() {
         const retryAfter = error.retryAfter || 30
         setRetryCountdown(retryAfter)
         setAiRequestStatus('rate-limited')
-        alert(`Rate limited. Please wait ${retryAfter} seconds before trying again.`)
+        showToast(`Rate limited. Please wait ${retryAfter} seconds before trying again.`, 'warning')
         return
       }
       
@@ -241,17 +367,13 @@ function App() {
       
       const result = await response.json()
       
-      console.log('AI Task Response:', result) // Debug log
-      
       // Check if it's a split suggestion
       if (result.type === 'split_suggestion') {
-        console.log('Split suggestion detected, showing modal') // Debug log
         setSplitSuggestion(result)
         setShowSplitPreview(true)
         setShowAIModal(false)
       } else {
         // Regular card creation
-        console.log('Regular card creation') // Debug log
         setCards(prev => [...prev, result])
         setAiDescription('')
         setShowAIModal(false)
@@ -260,7 +382,7 @@ function App() {
       setAiRequestStatus('ready')
     } catch (error: any) {
       console.error('Error creating AI card:', error)
-      alert(error.message || 'Failed to create AI card. Please ensure Bedrock is enabled in your AWS account.')
+      showToast(error.message || 'Failed to create AI card. Please ensure Bedrock is enabled in your AWS account.', 'error')
       setAiRequestStatus('ready')
     } finally {
       setAiLoading(false)
@@ -299,10 +421,10 @@ function App() {
       setShowSplitPreview(false)
       setSplitSuggestion(null)
       setAiDescription('')
-      alert(`Successfully created ${splitSuggestion.splitCards.length} cards!`)
+      showToast(`Successfully created ${splitSuggestion.splitCards.length} cards!`, 'success')
     } catch (error: any) {
       console.error('Error creating split cards:', error)
-      alert(error.message || 'Failed to create split cards.')
+      showToast(error.message || 'Failed to create split cards.', 'error')
     } finally {
       setAiLoading(false)
     }
@@ -339,10 +461,10 @@ function App() {
       setShowSplitPreview(false)
       setSplitSuggestion(null)
       setAiDescription('')
-      alert('Card created successfully!')
+      showToast('Card created successfully!', 'success')
     } catch (error: any) {
       console.error('Error creating card:', error)
-      alert(error.message || 'Failed to create card.')
+      showToast(error.message || 'Failed to create card.', 'error')
     } finally {
       setAiLoading(false)
     }
@@ -363,12 +485,13 @@ function App() {
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, column: newColumn } : c))
     } catch (error) {
       console.error('Error moving card:', error)
-      alert('Failed to move card. Please try again.')
+      showToast('Failed to move card. Please try again.', 'error')
     }
   }
 
   const deleteCard = async (cardId: string) => {
-    if (!confirm('Delete this card?')) return
+    const confirmed = await showConfirm('Delete this card?')
+    if (!confirmed) return
     try {
       const response = await fetch(`${API_URL}/cards/${cardId}`, { method: 'DELETE' })
       
@@ -379,7 +502,7 @@ function App() {
       setCards(prev => prev.filter(c => c.id !== cardId))
     } catch (error) {
       console.error('Error deleting card:', error)
-      alert('Failed to delete card. Please try again.')
+      showToast('Failed to delete card. Please try again.', 'error')
     }
   }
 
@@ -389,6 +512,22 @@ function App() {
     <div className="app">
       <header className="header">
         <h1>🌊 FlowState</h1>
+        <nav className="nav-tabs">
+          <button 
+            className={`nav-tab ${currentView === 'board' ? 'active' : ''}`}
+            onClick={() => setCurrentView('board')}
+            data-testid="nav-board-tab"
+          >
+            📋 Board
+          </button>
+          <button 
+            className={`nav-tab ${currentView === 'team' ? 'active' : ''}`}
+            onClick={() => setCurrentView('team')}
+            data-testid="nav-team-tab"
+          >
+            👥 Team
+          </button>
+        </nav>
         <div className="header-actions">
           {/* AI Status Indicator */}
           <div className={`ai-status-indicator status-${aiRequestStatus}`}>
@@ -410,71 +549,152 @@ function App() {
         </div>
       </header>
 
-      <div className="board">
-        {COLUMNS.map(column => (
-          <div 
-            key={column} 
-            className="column"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault()
-              const cardId = e.dataTransfer.getData('cardId')
-              if (cardId) moveCard(cardId, column)
-            }}
-          >
-            <div className="column-header">
-              <h2>{column}</h2>
-              <span className="card-count">
-                {cards.filter(c => c.column === column).length}
-              </span>
-            </div>
-            <div className="cards">
-              {cards
-                .filter(c => c.column === column)
-                .map(card => (
-                  <div 
-                    key={card.id} 
-                    className="card"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('cardId', card.id)
-                      e.currentTarget.style.opacity = '0.5'
-                    }}
-                    onDragEnd={(e) => {
-                      e.currentTarget.style.opacity = '1'
-                    }}
-                  >
-                    <div className="card-header">
-                      <h3>{card.title}</h3>
-                      {card.aiGenerated && <span className="ai-badge">✨ AI</span>}
-                    </div>
-                    <p className="card-description">{card.description}</p>
-                    {card.storyPoints && (
-                      <div className="card-meta">
-                        <span>📊 {card.storyPoints} pts</span>
-                      </div>
-                    )}
-                    <div className="card-actions">
-                      {column !== 'To Do' && (
-                        <button onClick={() => moveCard(card.id, COLUMNS[COLUMNS.indexOf(column) - 1])}>
-                          ← Move Left
-                        </button>
-                      )}
-                      {column !== 'Done' && (
-                        <button onClick={() => moveCard(card.id, COLUMNS[COLUMNS.indexOf(column) + 1])}>
-                          Move Right →
-                        </button>
-                      )}
-                      <button onClick={() => deleteCard(card.id)} className="btn-delete">
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
+      {currentView === 'team' ? (
+        <TeamPage />
+      ) : (
+        <>
+          {/* Assignee Filter */}
+          {teamMembers.length > 0 && (
+            <div className="board-filters">
+              <label htmlFor="assignee-filter">Filter by Assignee:</label>
+              <select
+                id="assignee-filter"
+                value={selectedAssignee || ''}
+                onChange={e => setSelectedAssignee(e.target.value || null)}
+                data-testid="assignee-filter"
+              >
+                <option value="">All ({cards.length})</option>
+                {teamMembers.map(member => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} ({cards.filter(c => c.assignees?.includes(member.id)).length})
+                  </option>
                 ))}
+              </select>
             </div>
+          )}
+
+          <div className="board">
+            {COLUMNS.map(column => (
+              <div 
+                key={column} 
+                className="column"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const cardId = e.dataTransfer.getData('cardId')
+                  if (cardId) moveCard(cardId, column)
+                }}
+              >
+                <div className="column-header">
+                  <h2>{column}</h2>
+                  <span className="card-count">
+                    {filteredCards.filter(c => c.column === column).length}
+                  </span>
+                </div>
+                <div className="cards">
+                  {filteredCards
+                    .filter(c => c.column === column)
+                    .map(card => (
+                      <div 
+                        key={card.id} 
+                        className="card"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('cardId', card.id)
+                          e.currentTarget.style.opacity = '0.5'
+                        }}
+                        onDragEnd={(e) => {
+                          e.currentTarget.style.opacity = '1'
+                        }}
+                      >
+                        <div className="card-header">
+                          <h3>{card.title}</h3>
+                          {card.aiGenerated && <span className="ai-badge">✨ AI</span>}
+                        </div>
+                        <p className="card-description">{card.description}</p>
+                        
+                        {/* Assignment UI */}
+                        {teamMembers.length > 0 && (
+                          <div className="card-assignment">
+                            <label>Assign to:</label>
+                            <select
+                              value=""
+                              onChange={e => {
+                                if (e.target.value) {
+                                  const newAssignees = [...(card.assignees || []), e.target.value]
+                                  updateCardAssignees(card.id, newAssignees)
+                                  e.target.value = '' // Reset dropdown
+                                }
+                              }}
+                              className="assignee-dropdown"
+                              data-testid={`card-assignee-dropdown-${card.id}`}
+                            >
+                              <option value="">+ Add assignee</option>
+                              {teamMembers
+                                .filter(member => !card.assignees?.includes(member.id))
+                                .map(member => (
+                                  <option key={member.id} value={member.id}>
+                                    {member.name}
+                                  </option>
+                                ))}
+                            </select>
+                            {card.assignees && card.assignees.length > 0 && (
+                              <div className="assigned-members">
+                                {card.assignees
+                                  .filter(assigneeId => teamMembers.some(m => m.id === assigneeId))
+                                  .map(assigneeId => (
+                                    <span key={assigneeId} className="assigned-member-badge">
+                                      {getTeamMemberName(assigneeId)}
+                                      <button
+                                        className="remove-assignee"
+                                        onClick={() => {
+                                          const newAssignees = card.assignees!.filter(id => id !== assigneeId)
+                                          updateCardAssignees(card.id, newAssignees)
+                                        }}
+                                        title="Remove assignee"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                {card.assignedAt && (
+                                  <span className="assignment-duration">
+                                    Assigned {getAssignmentDuration(card.assignedAt)}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {card.storyPoints && (
+                          <div className="card-meta">
+                            <span>📊 {card.storyPoints} pts</span>
+                          </div>
+                        )}
+                        <div className="card-actions">
+                          {column !== 'To Do' && (
+                            <button onClick={() => moveCard(card.id, COLUMNS[COLUMNS.indexOf(column) - 1])}>
+                              ← Move Left
+                            </button>
+                          )}
+                          {column !== 'Done' && (
+                            <button onClick={() => moveCard(card.id, COLUMNS[COLUMNS.indexOf(column) + 1])}>
+                              Move Right →
+                            </button>
+                          )}
+                          <button onClick={() => deleteCard(card.id)} className="btn-delete">
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
       {/* Add Card Modal */}
       {showAddCard && (
@@ -670,6 +890,34 @@ function App() {
                       )}
                     </div>
                     <p className="alert-message">{alert.message}</p>
+                    {alert.affectedTeamMember && (
+                      <div className="alert-details">
+                        <strong>Team Member:</strong> {getTeamMemberName(alert.affectedTeamMember)}
+                        {alert.currentWorkload && alert.threshold && (
+                          <span> (Workload: {alert.currentWorkload} pts, Threshold: {alert.threshold} pts)</span>
+                        )}
+                      </div>
+                    )}
+                    {alert.overloadedMembers && alert.overloadedMembers.length > 0 && (
+                      <div className="alert-details">
+                        <strong>Overloaded Members:</strong>
+                        <ul>
+                          {alert.overloadedMembers.map(m => (
+                            <li key={m.id}>{m.name} ({m.workload} pts)</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {alert.idleMembers && alert.idleMembers.length > 0 && (
+                      <div className="alert-details">
+                        <strong>Idle Members:</strong>
+                        <ul>
+                          {alert.idleMembers.map(m => (
+                            <li key={m.id}>{m.name} ({m.workload} pts)</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {alert.recommendations && alert.recommendations.length > 0 && (
                       <div className="alert-recommendations">
                         <strong>Recommendations:</strong>
@@ -690,6 +938,39 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Toast Notifications */}
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast toast-${toast.type}`}>
+            <span className="toast-icon">
+              {toast.type === 'success' && '✓'}
+              {toast.type === 'error' && '✕'}
+              {toast.type === 'warning' && '⚠'}
+              {toast.type === 'info' && 'ℹ'}
+            </span>
+            <span className="toast-message">{toast.message}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirm Dialog */}
+      {confirmDialog && (
+        <div className="modal-overlay" onClick={confirmDialog.onCancel}>
+          <div className="modal confirm-dialog" onClick={e => e.stopPropagation()}>
+            <h3>Confirm Action</h3>
+            <p>{confirmDialog.message}</p>
+            <div className="modal-actions">
+              <button onClick={confirmDialog.onCancel} className="btn">
+                Cancel
+              </button>
+              <button onClick={confirmDialog.onConfirm} className="btn btn-primary">
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

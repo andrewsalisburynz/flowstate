@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
-import { cardsService } from '../services/dynamodb';
+import { cardsService, teamMembersService } from '../services/dynamodb';
 import { broadcastToAll } from '../services/websocket';
 import { Card, CreateCardRequest, UpdateCardRequest } from '../types';
 
@@ -92,6 +92,54 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'PUT' && path.startsWith('/cards/')) {
       const id = path.split('/')[2];
       const updates: UpdateCardRequest = JSON.parse(event.body || '{}');
+      
+      // Validate assignees if provided
+      if (updates.assignees !== undefined) {
+        if (!Array.isArray(updates.assignees)) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Assignees must be an array' }),
+          };
+        }
+
+        if (updates.assignees.length > 10) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Cannot assign more than 10 team members to a card' }),
+          };
+        }
+
+        // Validate each assignee ID exists
+        for (const assigneeId of updates.assignees) {
+          const teamMember = await teamMembersService.get(assigneeId);
+          if (!teamMember) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: `Invalid assignee ID: ${assigneeId}` }),
+            };
+          }
+        }
+
+        // Check if assignees changed to update assignedAt
+        const existingCard = await cardsService.get(id);
+        if (existingCard) {
+          const existingAssignees = existingCard.assignees || [];
+          const newAssignees = updates.assignees;
+          
+          // Compare arrays (order-independent)
+          const assigneesChanged = 
+            existingAssignees.length !== newAssignees.length ||
+            !existingAssignees.every(id => newAssignees.includes(id)) ||
+            !newAssignees.every(id => existingAssignees.includes(id));
+
+          if (assigneesChanged) {
+            (updates as any).assignedAt = newAssignees.length > 0 ? new Date().toISOString() : undefined;
+          }
+        }
+      }
       
       // Check if column is being changed to track duration
       if (updates.column) {
