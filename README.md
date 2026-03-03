@@ -1,6 +1,6 @@
 # 🌊 FlowState
 
-[![CI](https://github.com/yourusername/flowstate/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/flowstate/actions/workflows/ci.yml)
+[![CI](https://github.com/andrewsalisburynz/flowstate/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewsalisburynz/flowstate/actions/workflows/ci.yml)
 
 AI-powered Kanban board built on AWS serverless architecture for seamless task management and workflow optimization.
 
