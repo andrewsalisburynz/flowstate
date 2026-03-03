@@ -1,0 +1,22 @@
+{
+  "name": "infrastructure",
+  "version": "1.0.0",
+  "description": "FlowState AWS CDK infrastructure",
+  "author": "FlowState",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "cdk deploy --all --require-approval never",
+    "synth": "cdk synth",
+    "diff": "cdk diff"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.110.0",
+    "constructs": "^10.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "aws-cdk": "^2.110.0",
+    "typescript": "^5.9.3"
+  }
+}

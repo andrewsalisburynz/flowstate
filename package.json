@@ -1,0 +1,23 @@
+{
+  "name": "flowstate",
+  "version": "1.0.0",
+  "description": "AI-powered Kanban board built on AWS serverless architecture",
+  "private": true,
+  "author": "FlowState",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/flowstate.git"
+  },
+  "scripts": {
+    "deploy": "cd infrastructure && npm run deploy",
+    "destroy": "cd infrastructure && cdk destroy --all",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "workspaces": [
+    "infrastructure",
+    "backend",
+    "frontend"
+  ]
+}
