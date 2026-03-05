@@ -93,6 +93,49 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const id = path.split('/')[2];
       const updates: UpdateCardRequest = JSON.parse(event.body || '{}');
       
+      // Validate title if provided
+      if (updates.title !== undefined) {
+        const trimmedTitle = updates.title.trim();
+        if (trimmedTitle.length === 0) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Title is required', message: 'Title is required' }),
+          };
+        }
+        if (updates.title.length > 60) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Title must be 60 characters or less', message: 'Title must be 60 characters or less' }),
+          };
+        }
+      }
+      
+      // Validate story points if provided
+      if (updates.storyPoints !== undefined) {
+        const validStoryPoints = [1, 2, 3, 5, 8, 13];
+        if (!validStoryPoints.includes(updates.storyPoints)) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Story points must be 1, 2, 3, 5, 8, or 13', message: 'Story points must be 1, 2, 3, 5, 8, or 13' }),
+          };
+        }
+      }
+      
+      // Validate priority if provided
+      if (updates.priority !== undefined) {
+        const validPriorities = ['low', 'medium', 'high'];
+        if (!validPriorities.includes(updates.priority)) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Priority must be low, medium, or high', message: 'Priority must be low, medium, or high' }),
+          };
+        }
+      }
+      
       // Validate assignees if provided
       if (updates.assignees !== undefined) {
         if (!Array.isArray(updates.assignees)) {

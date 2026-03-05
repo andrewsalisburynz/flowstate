@@ -1,85 +1,22 @@
-# Requirements Clarification Questions
+# Requirements Clarification Questions - Card Editing Feature
 
-I detected a significant contradiction in your responses that needs clarification:
+I detected a contradiction in your responses that needs clarification:
 
----
+## Contradiction 1: Real-time Broadcasting vs. Cancel Behavior
+You indicated "Yes, immediately broadcast all edits via WebSocket" (Q6:A) but also "Yes, by clicking outside the edit interface" for canceling edits (Q9:B).
 
-## Contradiction 1: Scope vs. Feature Decisions
-
-**Issue**: You indicated that team management features should be deferred (Q23: Answer B), but you provided detailed specifications for team management features in Q7-Q12 and Q17-Q20.
-
-**Your Answers**:
-- **Q23**: "B) AI rate limiting + card splitting (defer team management to iteration 3)"
-- **Q7-Q12**: Detailed team administration, card assignment, and UI specifications
-- **Q17-Q18**: Bottleneck detection with team member assignments
-- **Q19**: Team members stored per board
-- **Q21**: Defer authentication to iteration 3
-
-**The Contradiction**: 
-- If team management is deferred to iteration 3, then Q7-Q12 and Q17-Q20 answers are not needed for iteration 2
-- However, you provided specific answers for team features, suggesting you may want them included
-- Additionally, team management typically requires authentication, which you're deferring to iteration 3
+These responses are contradictory because:
+- If edits are broadcast immediately as the user types, the changes are already sent to other users and saved to the database
+- There would be nothing to "cancel" since the changes are already persisted and visible to others
+- Clicking outside would just close the dialog, not revert changes
 
 ### Clarification Question 1
-Please clarify the scope for iteration 2:
+How should the save/broadcast behavior work for card edits?
 
-A) AI features ONLY (rate limiting + card splitting) - defer ALL team management to iteration 3
-B) AI features + basic team management WITHOUT authentication (shared board, anyone can add team members)
-C) AI features + enhanced card editing (acceptance criteria, duration tracking) - defer team management to iteration 3
-D) All features from original request (AI + team + card editing) - defer authentication to iteration 3
-E) Other (please describe your preferred scope)
+A) Auto-save and broadcast immediately as user types (no cancel needed - clicking outside just closes dialog)
+B) Save and broadcast only when user clicks "Save" button (clicking outside cancels and reverts changes)
+C) Auto-save locally but broadcast only on "Save" button (clicking outside keeps local changes but doesn't broadcast)
+D) Debounced auto-save (wait 1-2 seconds after user stops typing, then save and broadcast - clicking outside during typing cancels)
+E) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
-
----
-
-## Ambiguity 1: Enhanced Card Editing Scope
-
-**Issue**: Your original request mentioned enhanced card editing with "acceptance criteria, sizing information, duration has been in the current column", but Q23 suggests deferring some features.
-
-### Clarification Question 2
-Should enhanced card editing be included in iteration 2?
-
-A) Yes, include all card editing enhancements (acceptance criteria UI, duration tracking)
-B) No, defer to iteration 3 along with team management
-C) Partial - include only acceptance criteria editing, defer duration tracking
-D) Other (please specify)
-
-[Answer]: 
-
----
-
-## Ambiguity 2: Bottleneck Analysis Updates
-
-**Issue**: Q17-Q18 specify bottleneck detection with team assignments, but if team management is deferred, the current bottleneck analysis won't change.
-
-### Clarification Question 3
-Should bottleneck analysis be updated in iteration 2?
-
-A) No changes - keep current bottleneck analysis (aging cards, column bottlenecks)
-B) Add duration-based alerts only (no team assignment logic)
-C) Add team assignment logic even though team management is deferred
-D) Other (please specify)
-
-[Answer]: 
-
----
-
-## Ambiguity 3: Timeline "ASAP"
-
-**Issue**: "ASAP" is ambiguous for planning purposes.
-
-### Clarification Question 4
-What does "ASAP" mean for your timeline?
-
-A) 1-2 days (minimal viable implementation)
-B) 3-5 days (solid implementation with testing)
-C) 1 week (comprehensive implementation)
-D) As fast as possible without compromising quality (flexible)
-E) Other (please specify)
-
-[Answer]: 
-
----
-
-Please answer these 4 clarification questions so I can proceed with accurate requirements documentation.
+[Answer]: B

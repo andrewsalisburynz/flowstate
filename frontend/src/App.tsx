@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { TeamPage } from './components/TeamPage'
+import EditCardModal from './components/EditCardModal'
 
 const API_URL = import.meta.env.VITE_API_URL || 'YOUR_API_URL_HERE'
 const WS_URL = import.meta.env.VITE_WS_URL || 'YOUR_WS_URL_HERE'
@@ -17,6 +18,8 @@ interface Card {
   acceptanceCriteria?: string[]
   assignees?: string[]
   assignedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 interface TeamMember {
@@ -84,6 +87,8 @@ function App() {
   const [showAddCard, setShowAddCard] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
   const [newCard, setNewCard] = useState({ title: '', description: '', column: 'To Do' })
+  const [editingCard, setEditingCard] = useState<Card | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [aiDescription, setAiDescription] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -506,6 +511,38 @@ function App() {
     }
   }
 
+  const handleEditCard = (card: Card) => {
+    setEditingCard(card)
+    setIsEditModalOpen(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false)
+    setEditingCard(null)
+  }
+
+  const handleSaveCard = async (cardId: string, updates: any) => {
+    try {
+      const response = await fetch(`${API_URL}/cards/${cardId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to save card')
+      }
+      
+      const updatedCard = await response.json()
+      setCards(prev => prev.map(c => c.id === cardId ? updatedCard : c))
+      showToast('Card updated successfully!', 'success')
+    } catch (error: any) {
+      console.error('Error saving card:', error)
+      throw error
+    }
+  }
+
   if (loading) return <div className="loading">Loading...</div>
 
   return (
@@ -606,6 +643,8 @@ function App() {
                         onDragEnd={(e) => {
                           e.currentTarget.style.opacity = '1'
                         }}
+                        onDoubleClick={() => handleEditCard(card)}
+                        data-testid={`kanban-card-${card.id}`}
                       >
                         <div className="card-header">
                           <h3>{card.title}</h3>
@@ -971,6 +1010,14 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Edit Card Modal */}
+      <EditCardModal
+        card={editingCard}
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        onSave={handleSaveCard}
+      />
     </div>
   )
 }

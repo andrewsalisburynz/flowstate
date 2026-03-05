@@ -1,397 +1,277 @@
-# Requirements Document - Iteration 3: Team Management & Assignment
+# Requirements - Card Editing Feature
 
-## Executive Summary
+## Intent Analysis Summary
 
-**Iteration**: 3  
-**Focus**: Team member management, card assignment, and bottleneck detection integration  
-**Timeline**: 3-4 hours  
-**Priority**: Delivery velocity - keep it simple and functional
+### User Request
+"I want to be able to edit the cards that are on the board."
+
+### Request Type
+Enhancement - Adding edit capability to existing card functionality
+
+### Scope Estimate
+Single Component - Frontend React component + Backend Lambda handler modifications
+
+### Complexity Estimate
+Moderate - Requires UI modal, validation logic, API endpoint modification, and real-time broadcasting
 
 ---
 
 ## Functional Requirements
 
-### FR-1: Team Member Management
+### FR1: Card Edit Initiation
+- **FR1.1**: Users shall be able to initiate card editing by double-clicking on any card
+- **FR1.2**: Double-click shall work on any visible part of the card (title, description area, metadata)
+- **FR1.3**: Edit functionality shall be available for cards in all columns (To Do, In Progress, Done)
 
-**Description**: Add ability to create, view, edit, and delete team members.
+### FR2: Edit Interface
+- **FR2.1**: Card editing shall be presented in a modal dialog (popup overlay)
+- **FR2.2**: Modal shall display all card fields in an editable form
+- **FR2.3**: Modal shall have a semi-transparent backdrop that dims the background board
+- **FR2.4**: Modal shall be centered on the screen and responsive to different viewport sizes
 
-**User Story**: As a team lead, I want to manage team members so I can assign work to them.
+### FR3: Editable Fields
+- **FR3.1**: All card fields shall be editable:
+  - Title (text input, max 60 characters)
+  - Description (textarea, multi-line)
+  - Story Points (dropdown: 1, 2, 3, 5, 8, 13)
+  - Priority (dropdown: low, medium, high)
+  - Acceptance Criteria (textarea, multi-line text block)
+- **FR3.2**: The card's column position shall NOT be editable in the edit modal (use drag-and-drop instead)
+- **FR3.3**: The card's ID, createdAt, and aiGenerated flag shall NOT be editable
 
-**Acceptance Criteria**:
-- User can add a new team member with a name
-- User can view a list of all team members
-- User can edit a team member's name
-- User can delete a team member (hard delete, unassigns from all cards)
-- Team member names must be unique (case-insensitive)
-- Team members are stored in a new DynamoDB table (TeamMembersTable)
+### FR4: AI-Generated Card Handling
+- **FR4.1**: AI-generated cards shall be fully editable with no restrictions
+- **FR4.2**: The aiGenerated flag shall remain true after editing
+- **FR4.3**: No warning or confirmation shall be required to edit AI-generated cards
 
-**Data Model**:
-```typescript
-interface TeamMember {
-  id: string              // UUID
-  name: string            // Unique, case-insensitive
-  createdAt: string       // ISO timestamp
-  updatedAt: string       // ISO timestamp
-}
-```
+### FR5: Field Validation
+- **FR5.1**: Title field validation:
+  - Required (cannot be empty)
+  - Maximum 60 characters
+  - Display character count (e.g., "45/60")
+- **FR5.2**: Description field validation:
+  - Optional (can be empty)
+  - No maximum length
+- **FR5.3**: Story Points validation:
+  - Required
+  - Must be one of: 1, 2, 3, 5, 8, 13
+- **FR5.4**: Priority validation:
+  - Required
+  - Must be one of: low, medium, high
+- **FR5.5**: Acceptance Criteria validation:
+  - Optional (can be empty)
+  - Edited as a single text block (not individual list items)
+- **FR5.6**: Validation errors shall be displayed inline near the invalid field
+- **FR5.7**: Save button shall be disabled when validation errors exist
 
-**UI Location**: New "Team" page/tab in the app
+### FR6: Save and Cancel Behavior
+- **FR6.1**: Modal shall have two buttons: "Save" and "Cancel"
+- **FR6.2**: Clicking "Save" button shall:
+  - Validate all fields
+  - If valid: save changes to database, broadcast to other users, close modal
+  - If invalid: display validation errors, keep modal open
+- **FR6.3**: Clicking "Cancel" button shall:
+  - Discard all changes
+  - Close modal without saving
+- **FR6.4**: Clicking outside the modal (on backdrop) shall:
+  - Discard all changes
+  - Close modal without saving
+  - Behave identically to clicking "Cancel"
+- **FR6.5**: Pressing Escape key shall behave identically to clicking "Cancel"
+- **FR6.6**: No auto-save functionality - changes only persist on explicit "Save" action
 
-**Display**: Simple list with names
+### FR7: Real-time Broadcasting
+- **FR7.1**: Card updates shall be broadcast via WebSocket only when user clicks "Save"
+- **FR7.2**: Broadcast message shall include complete updated card data
+- **FR7.3**: All connected clients shall receive the card_updated event
+- **FR7.4**: Receiving clients shall update their local card state immediately
+- **FR7.5**: If the edited card is visible on another user's board, it shall update in real-time
 
----
+### FR8: Concurrent Edit Handling
+- **FR8.1**: Last save wins - no conflict detection or locking mechanism
+- **FR8.2**: If two users edit the same card simultaneously, the second save shall overwrite the first
+- **FR8.3**: No warning shall be displayed when another user is editing the same card
+- **FR8.4**: Users shall see updates from other users via WebSocket broadcasts
 
-### FR-2: Card Assignment
+### FR9: Edit History
+- **FR9.1**: Edit history/audit trail is deferred to a future iteration
+- **FR9.2**: Only the card's updatedAt timestamp shall be updated on save
+- **FR9.3**: No tracking of who made changes or what fields were modified
 
-**Description**: Assign one or more team members to cards.
-
-**User Story**: As a team lead, I want to assign team members to cards so I can track who is working on what.
-
-**Acceptance Criteria**:
-- User can assign multiple team members to a card
-- Assignment happens via dropdown/select on the card itself (inline editing)
-- Unassigned cards are allowed (assignment is optional)
-- Assignments are displayed as team member names on the card
-- User can reassign cards freely at any time
-- Assignments are stored in the Card model in DynamoDB
-
-**Data Model Update**:
-```typescript
-interface Card {
-  // ... existing fields
-  assignees?: string[]    // Array of team member IDs
-}
-```
-
-**UI Location**: Dropdown/select on card (inline editing)
-
-**Display**: Team member names as text on card
-
----
-
-### FR-3: Assignment Filtering
-
-**Description**: Filter cards by assignee in the board view.
-
-**User Story**: As a team member, I want to filter cards by assignee so I can see my assigned work.
-
-**Acceptance Criteria**:
-- Filter dropdown in board view shows all team members
-- Selecting a team member filters cards to show only those assigned to them
-- "All" option shows all cards (no filter)
-- Filter persists during session but resets on page reload
-
----
-
-### FR-4: Workload-Based Bottleneck Detection
-
-**Description**: Detect when team members are overloaded based on story points in "In Progress".
-
-**User Story**: As a team lead, I want to be alerted when team members are overloaded so I can rebalance work.
-
-**Acceptance Criteria**:
-- Calculate workload as sum of story points for cards assigned to a team member in "In Progress" column
-- Alert when a team member has >8 story points in "In Progress" (high severity)
-- Alert includes team member name, current workload, and affected card IDs
-- Recommendations include: reassign cards, break down large cards, move cards back to "To Do"
-
-**Alert Structure**:
-```typescript
-{
-  severity: 'high',
-  category: 'team_member_overload',
-  message: 'Team member [Name] is overloaded with [X] story points in progress',
-  affectedTeamMember: 'team-member-id',
-  affectedCards: ['card-id-1', 'card-id-2'],
-  currentWorkload: 13,
-  threshold: 8,
-  recommendations: [
-    'Reassign cards to less busy team members',
-    'Break down large cards into smaller tasks',
-    'Move some cards back to To Do'
-  ]
-}
-```
-
----
-
-### FR-5: Unassigned Card Alerts
-
-**Description**: Alert on unassigned cards in "In Progress" or "Done" columns.
-
-**User Story**: As a team lead, I want to be alerted about unassigned cards in active columns so I can ensure accountability.
-
-**Acceptance Criteria**:
-- Alert when a card in "In Progress" or "Done" has no assignees (low severity)
-- Alert includes card ID, title, and column
-- Recommendation: Assign the card to a team member
-
-**Alert Structure**:
-```typescript
-{
-  severity: 'low',
-  category: 'unassigned_card',
-  message: 'Card "[Title]" in [Column] is unassigned',
-  affectedCards: ['card-id'],
-  affectedColumn: 'In Progress',
-  recommendations: [
-    'Assign this card to a team member'
-  ]
-}
-```
-
----
-
-### FR-6: Workload Distribution Analysis
-
-**Description**: Detect when workload is unbalanced across the team.
-
-**User Story**: As a team lead, I want to be alerted when work is unevenly distributed so I can rebalance.
-
-**Acceptance Criteria**:
-- Analyze workload distribution across all team members
-- Alert when some team members are overloaded (>8 points) while others are idle (0 points) (medium severity)
-- Alert includes list of overloaded and idle team members
-- Recommendation: Reassign work from overloaded to idle team members
-
-**Alert Structure**:
-```typescript
-{
-  severity: 'medium',
-  category: 'workload_imbalance',
-  message: 'Workload is unbalanced: [X] overloaded, [Y] idle',
-  overloadedMembers: [
-    { id: 'id', name: 'Name', workload: 13 }
-  ],
-  idleMembers: [
-    { id: 'id', name: 'Name', workload: 0 }
-  ],
-  recommendations: [
-    'Reassign work from overloaded to idle team members'
-  ]
-}
-```
-
----
-
-### FR-7: Duration Tracking Per Assignee
-
-**Description**: Track how long cards have been assigned to each team member.
-
-**User Story**: As a team lead, I want to see how long cards have been with each assignee so I can identify blockers.
-
-**Acceptance Criteria**:
-- When a card is assigned or reassigned, record timestamp
-- Display duration on card (e.g., "Assigned to John for 3 days")
-- Include in bottleneck analysis (alert if assigned >7 days)
-
-**Data Model Update**:
-```typescript
-interface Card {
-  // ... existing fields
-  assignedAt?: string     // ISO timestamp when last assigned/reassigned
-}
-```
+### FR10: Backend API
+- **FR10.1**: Existing PUT /cards/{id} endpoint shall be used for updates
+- **FR10.2**: API shall validate all fields server-side (same rules as card creation)
+- **FR10.3**: API shall return 400 Bad Request for validation errors
+- **FR10.4**: API shall return 404 Not Found if card ID doesn't exist
+- **FR10.5**: API shall update the updatedAt timestamp automatically
+- **FR10.6**: API shall broadcast card_updated event to all WebSocket connections
 
 ---
 
 ## Non-Functional Requirements
 
-### NFR-1: Performance
-- Team member list should load in <500ms
-- Assignment operations should complete in <300ms
-- Bottleneck analysis should complete in <5 seconds
+### NFR1: Performance
+- **NFR1.1**: Modal shall open within 100ms of double-click
+- **NFR1.2**: Save operation shall complete within 500ms under normal conditions
+- **NFR1.3**: WebSocket broadcast shall reach all clients within 200ms
 
-### NFR-2: Scalability
-- Support up to 50 team members
-- Support up to 1000 cards with assignments
-- Efficient queries for workload calculation
+### NFR2: Usability
+- **NFR2.1**: Edit modal shall be keyboard accessible (Tab navigation, Enter to save, Escape to cancel)
+- **NFR2.2**: Form fields shall have clear labels and placeholders
+- **NFR2.3**: Validation errors shall be clear and actionable
+- **NFR2.4**: Modal shall be visually consistent with existing card creation modal
 
-### NFR-3: Usability
-- Simple, intuitive UI for team management
-- Inline assignment editing for quick updates
-- Clear visual indication of assignments on cards
+### NFR3: Reliability
+- **NFR3.1**: Failed save operations shall display error message to user
+- **NFR3.2**: Network errors shall not close the modal (allow user to retry)
+- **NFR3.3**: Validation shall occur both client-side and server-side
 
-### NFR-4: Data Integrity
-- Prevent duplicate team member names
-- Handle team member deletion gracefully (unassign from cards)
-- Maintain referential integrity between cards and team members
+### NFR4: Compatibility
+- **NFR4.1**: Edit functionality shall work in all browsers supported by React 18
+- **NFR4.2**: Modal shall be responsive and work on tablet-sized screens (768px+)
+- **NFR4.3**: Edit functionality shall work with existing drag-and-drop behavior
 
----
-
-## API Changes
-
-### New Endpoints
-
-#### Team Members
-- `GET /team-members` - List all team members
-- `POST /team-members` - Create a team member
-- `GET /team-members/{id}` - Get a team member
-- `PUT /team-members/{id}` - Update a team member
-- `DELETE /team-members/{id}` - Delete a team member (unassigns from all cards)
-
-#### Card Assignment (extend existing endpoints)
-- `PUT /cards/{id}` - Update card (now supports `assignees` field)
-
-### Request/Response Examples
-
-**Create Team Member**:
-```json
-POST /team-members
-{
-  "name": "John Doe"
-}
-
-Response:
-{
-  "id": "uuid",
-  "name": "John Doe",
-  "createdAt": "2026-03-04T12:00:00Z",
-  "updatedAt": "2026-03-04T12:00:00Z"
-}
-```
-
-**Assign Team Members to Card**:
-```json
-PUT /cards/{id}
-{
-  "assignees": ["team-member-id-1", "team-member-id-2"]
-}
-```
+### NFR5: Security
+- **NFR5.1**: All API requests shall use HTTPS
+- **NFR5.2**: Input sanitization shall prevent XSS attacks
+- **NFR5.3**: Server-side validation shall prevent malicious payloads
 
 ---
 
-## Database Schema
+## Technical Constraints
 
-### New Table: TeamMembersTable
+### TC1: Existing Architecture
+- Must integrate with existing DynamoDB schema (no schema changes)
+- Must use existing PUT /cards/{id} Lambda handler
+- Must use existing WebSocket infrastructure for broadcasting
+- Must maintain compatibility with existing card creation flow
 
-**Partition Key**: `id` (String)
+### TC2: Technology Stack
+- Frontend: React 18 + TypeScript
+- Backend: AWS Lambda (Node.js 20)
+- Database: DynamoDB (Cards table)
+- Real-time: API Gateway WebSocket
 
-**Attributes**:
-- `id`: String (UUID)
-- `name`: String (unique, case-insensitive)
-- `createdAt`: String (ISO timestamp)
-- `updatedAt`: String (ISO timestamp)
-
-**GSI**: `name-index` for uniqueness checks
-
-### Updated Table: CardsTable
-
-**New Attributes**:
-- `assignees`: List of Strings (team member IDs)
-- `assignedAt`: String (ISO timestamp, when last assigned/reassigned)
-
----
-
-## UI Changes
-
-### New: Team Page
-- Navigation tab: "Team"
-- Simple list of team members
-- "Add Team Member" button
-- Edit/Delete actions per team member
-
-### Updated: Card Component
-- Add assignee dropdown/select (multi-select)
-- Display assigned team member names
-- Show assignment duration (e.g., "Assigned 3 days ago")
-
-### Updated: Board View
-- Add filter dropdown: "Filter by Assignee"
-- Options: "All", then list of team members
-
-### Updated: Bottleneck Alerts Panel
-- New alert types: team_member_overload, unassigned_card, workload_imbalance
-- Display team member names in alerts
-- Show workload metrics
+### TC3: Deployment
+- No infrastructure changes required (use existing CDK stacks)
+- Frontend changes deployed via S3 + CloudFront
+- Backend changes deployed via Lambda function updates
 
 ---
 
-## Implementation Priority
+## User Scenarios
 
-### Must-Have (Iteration 3)
-1. ✅ Team member CRUD operations
-2. ✅ Card assignment (multiple assignees)
-3. ✅ Assignment display on cards
-4. ✅ Assignment filtering
-5. ✅ Workload-based bottleneck detection
-6. ✅ Unassigned card alerts
-7. ✅ Workload distribution analysis
-8. ✅ Duration tracking per assignee
+### Scenario 1: Edit Card Title
+1. User double-clicks on a card in "To Do" column
+2. Edit modal opens with all fields populated
+3. User changes title from "Implement login" to "Implement user authentication"
+4. User clicks "Save"
+5. Modal closes, card updates on board
+6. Other users see the updated title in real-time
 
-### Deferred (Future Iterations)
-- AI-suggested assignees based on workload
-- Split cards inheriting assignees
-- Authentication and permissions
-- Team roles and capacity planning
-- Advanced time tracking
+### Scenario 2: Cancel Edit
+1. User double-clicks on a card
+2. Edit modal opens
+3. User changes description and story points
+4. User clicks outside the modal (on backdrop)
+5. Modal closes without saving
+6. Card remains unchanged on board
+
+### Scenario 3: Validation Error
+1. User double-clicks on a card
+2. Edit modal opens
+3. User deletes the title (makes it empty)
+4. User clicks "Save"
+5. Validation error appears: "Title is required"
+6. Save button is disabled
+7. User enters a new title
+8. Save button becomes enabled
+9. User clicks "Save" successfully
+
+### Scenario 4: Edit AI-Generated Card
+1. User double-clicks on an AI-generated card (has AI badge)
+2. Edit modal opens normally
+3. User edits acceptance criteria
+4. User clicks "Save"
+5. Card updates successfully
+6. AI badge remains visible on card
+
+### Scenario 5: Concurrent Edits (Last Save Wins)
+1. User A opens edit modal for Card #123
+2. User B opens edit modal for Card #123
+3. User A changes title to "Version A" and saves
+4. User B sees the update via WebSocket
+5. User B changes title to "Version B" and saves
+6. Final result: Card #123 has title "Version B"
+7. User A sees the update via WebSocket
 
 ---
 
 ## Success Criteria
 
-Iteration 3 is successful when:
-- ✅ Team members can be added, edited, and deleted
-- ✅ Cards can be assigned to multiple team members
-- ✅ Assignments are displayed on cards
-- ✅ Cards can be filtered by assignee
-- ✅ Bottleneck detection alerts on overloaded team members (>8 points in progress)
-- ✅ Bottleneck detection alerts on unassigned cards in active columns
-- ✅ Bottleneck detection alerts on workload imbalance
-- ✅ Duration tracking shows how long cards have been assigned
-- ✅ All features work end-to-end in production
-- ✅ Timeline: 3-4 hours
+### SC1: Functional Completeness
+- All card fields can be edited via double-click modal
+- Save and cancel behaviors work as specified
+- Real-time updates visible to all connected users
+
+### SC2: User Experience
+- Edit flow feels intuitive and responsive
+- Validation errors are clear and helpful
+- Modal design matches existing UI patterns
+
+### SC3: Technical Quality
+- No breaking changes to existing functionality
+- Server-side validation prevents invalid data
+- WebSocket broadcasting works reliably
+
+### SC4: Testing
+- Unit tests for validation logic
+- Integration tests for API endpoint
+- Manual testing of concurrent edit scenarios
 
 ---
 
-## Testing Strategy
+## Out of Scope (Future Iterations)
 
-### Manual Testing
-1. Create team members
-2. Assign team members to cards
-3. Filter cards by assignee
-4. Verify bottleneck alerts for overloaded team members
-5. Verify alerts for unassigned cards
-6. Verify workload distribution alerts
-7. Test team member deletion (unassigns from cards)
-8. Test assignment duration tracking
-
-### Integration Testing
-1. Team member CRUD via API
-2. Card assignment via API
-3. Bottleneck analysis with team workload
-4. WebSocket updates for assignment changes
+- Edit history/audit trail (deferred per Q8:D)
+- Optimistic locking or conflict detection
+- In-place editing (not modal-based)
+- Bulk edit of multiple cards
+- Undo/redo functionality
+- Edit permissions or role-based access control
+- Editing card position/column via modal (use drag-and-drop)
+- Individual acceptance criteria item management (edit as text block only)
 
 ---
 
 ## Dependencies
 
-- Existing: DynamoDB, Lambda, API Gateway, React, Bedrock
-- New: TeamMembersTable in DynamoDB
-- No new external dependencies
+### Existing Components
+- Cards Lambda handler (backend/handlers/cards.ts)
+- DynamoDB service (backend/services/dynamodb.ts)
+- WebSocket service (backend/services/websocket.ts)
+- React App component (frontend/src/App.tsx)
+- Card type definitions (backend/types/card.ts)
+
+### Existing Infrastructure
+- DynamoDB Cards table
+- DynamoDB Connections table
+- REST API Gateway (PUT /cards/{id} endpoint)
+- WebSocket API Gateway
 
 ---
 
-## Risks and Mitigation
+## Acceptance Criteria
 
-**Risk**: Team member deletion could orphan cards  
-**Mitigation**: Hard delete unassigns from all cards automatically
-
-**Risk**: Workload calculation could be slow with many cards  
-**Mitigation**: Efficient DynamoDB queries, calculate only for "In Progress" cards
-
-**Risk**: Multiple assignees could complicate UI  
-**Mitigation**: Simple text display, comma-separated names
-
-**Risk**: Timeline is tight (3-4 hours)  
-**Mitigation**: Keep implementation simple, no fancy UI, focus on functionality
-
----
-
-## Notes
-
-- **Delivery velocity is priority** - keep it simple and functional
-- No authentication/permissions in this iteration
-- No AI integration with assignments (deferred)
-- No advanced time tracking (just basic duration)
-- Focus on core functionality that works end-to-end
+- [ ] User can double-click any card to open edit modal
+- [ ] Edit modal displays all card fields in editable form
+- [ ] All fields (title, description, story points, priority, acceptance criteria) are editable
+- [ ] Title validation enforces max 60 characters and required field
+- [ ] Save button is disabled when validation errors exist
+- [ ] Clicking "Save" persists changes and broadcasts to other users
+- [ ] Clicking "Cancel" or outside modal discards changes
+- [ ] AI-generated cards are fully editable
+- [ ] Real-time updates visible to all connected users
+- [ ] Last save wins for concurrent edits (no conflict detection)
+- [ ] updatedAt timestamp is updated on save
+- [ ] Edit functionality works without breaking existing features
